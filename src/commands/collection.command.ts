@@ -39,7 +39,6 @@ import UserGameCollection, {
   COLLECTION_OWNERSHIP_TYPES,
   type CollectionOwnershipType,
   type IUserGameCollectionOverviewEntry,
-  type IUserGameCollectionUserOverview,
 } from "../classes/UserGameCollection.js";
 import {
   type SteamCollectionMatchConfidence,
@@ -151,11 +150,14 @@ const COLLECTION_OVERVIEW_SELECT_OVERVIEW = "overview";
 const COLLECTION_OVERVIEW_SELECT_ALL_GAMES = "all-games";
 const COLLECTION_OVERVIEW_SELECT_PLATFORM_PREFIX = "platform";
 const COLLECTION_OVERVIEW_UNKNOWN_PLATFORM = "Unknown platform";
-const COLLECTION_OVERVIEW_MAX_COMPONENTS = 35;
+const COLLECTION_OVERVIEW_MAX_TEXT_COMPONENTS_PER_CONTAINER = 34;
 const COLLECTION_OVERVIEW_PLATFORM_EMOJI_KEYS: Record<string, keyof typeof COLLECTION_OVERVIEW_EMOJIS> = {
-  "pc (microsoft windows)": "steam",
+  "pc (microsoft windows)": "win",
   "pc (steam)": "steam",
-  windows: "steam",
+  windows: "win",
+  "pc (windows)": "win",
+  "pc windows": "win",
+  win: "win",
   steam: "steam",
   "steam deck": "steam",
   playstation: "ps1",
@@ -183,14 +185,40 @@ const COLLECTION_OVERVIEW_PLATFORM_EMOJI_KEYS: Record<string, keyof typeof COLLE
   switch: "nsw",
   "pc (epic)": "epic",
   "pc (luna)": "luna",
+  ios: "ios",
+  iphone: "ios",
+  ipad: "ios",
+  "mobile (ios)": "ios",
+  "mobile ios": "ios",
+  browser: "browser",
+  "web browser": "browser",
+  "web browser:": "browser",
+  web: "browser",
+  internet: "browser",
+  "playstation vita": "vita",
+  "ps vita": "vita",
+  psvita: "vita",
+  psv: "vita",
+  vita: "vita",
   wii: "wii",
   "wii u": "wiiu",
+  wiiu: "wiiu",
+  "new nintendo 3ds": "new3ds",
+  "new nintendo 3ds xl": "new3ds",
+  "new 3ds": "new3ds",
+  n3ds: "new3ds",
+  new3ds: "new3ds",
+  "nintendo 64": "n64",
+  n64: "n64",
   "nintendo 3ds": "3ds",
   "nintendo ds": "ds",
   "game boy": "gb",
   "game boy color": "gbc",
   "game boy advance": "gba",
+  "nintendo gamecube": "gc",
+  "gamecube (gcn)": "gc",
   gamecube: "gc",
+  gcn: "gc",
   gc: "gc",
   gba: "gba",
   gb: "gb",
@@ -1024,12 +1052,6 @@ function resolveMemberLabel(
   return fallback.username;
 }
 
-function resolveMemberLabelFromOverview(
-  overview: IUserGameCollectionUserOverview,
-): string {
-  return overview.globalName ?? overview.username ?? overview.userId;
-}
-
 function normalizePlatformEmojiKey(value: string | null | undefined): string | null {
   if (!value) return null;
   const normalized = value.toLowerCase().trim();
@@ -1257,29 +1279,15 @@ async function buildAllCollectionsOverviewMessages(): Promise<
   Array<{ components: Array<ContainerBuilder> }>
 > {
   const overview = await UserGameCollection.getOverviewForAllUsers();
-  const containers: ContainerBuilder[] = [];
-
-  containers.push(buildCollectionOverviewContainer({
+  const containers = buildAllCollectionsSummaryContainers({
     title: "All Game Collections",
     totalCount: overview.totalCount,
     platformCounts: overview.platformCounts,
+  });
+
+  const messages: Array<{ components: Array<ContainerBuilder> }> = containers.map((container) => ({
+    components: [container],
   }));
-
-  for (const user of overview.users) {
-    const memberLabel = resolveMemberLabelFromOverview(user);
-    containers.push(buildCollectionOverviewContainer({
-      title: `${memberLabel}'s Game Collection`,
-      totalCount: user.totalCount,
-      platformCounts: user.platformCounts,
-    }));
-  }
-
-  const messages: Array<{ components: Array<ContainerBuilder> }> = [];
-  for (let i = 0; i < containers.length; i += COLLECTION_OVERVIEW_MAX_COMPONENTS) {
-    messages.push({
-      components: containers.slice(i, i + COLLECTION_OVERVIEW_MAX_COMPONENTS),
-    });
-  }
 
   if (!messages.length) {
     messages.push({
@@ -1294,6 +1302,77 @@ async function buildAllCollectionsOverviewMessages(): Promise<
   }
 
   return messages;
+}
+
+function buildAllCollectionsSummaryContainers(params: {
+  title: string;
+  totalCount: number;
+  platformCounts: IUserGameCollectionOverviewEntry[];
+}): ContainerBuilder[] {
+  const createBaseContainer = (title: string): ContainerBuilder =>
+    new ContainerBuilder().addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`## ${title}`),
+    );
+
+  if (params.totalCount <= 0) {
+    const empty = createBaseContainer(params.title);
+    empty.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent("No collection entries yet."),
+    );
+    return [empty];
+  }
+
+  const platformLabels = params.platformCounts.map((entry) =>
+    formatCollectionOverviewPlatformLabel(entry)
+  );
+  const totals = params.platformCounts.map((entry) => entry.total.toLocaleString("en-US"));
+  const labelWidth = platformLabels.length
+    ? Math.max(...platformLabels.map((label) => label.length), 8)
+    : 8;
+  const totalWidth = totals.length
+    ? Math.max(...totals.map((value) => value.length), 2)
+    : 2;
+
+  const lines = params.platformCounts.map((entry) => {
+    const emoji = resolveCollectionOverviewEmoji({
+      platformName: entry.platformName,
+      platformAbbreviation: entry.platformAbbreviation,
+    });
+    const label = formatCollectionOverviewPlatformLabel(entry);
+    const fixedLabel = formatCollectionOverviewFixedLabel(label, labelWidth);
+    const fixedTotal = formatCollectionOverviewFixedTotal(entry.total, totalWidth);
+    const prefix = emoji ? `${emoji} ` : "";
+    return `${prefix}**${fixedLabel}** ${fixedTotal}`;
+  });
+
+  const containers: ContainerBuilder[] = [];
+  let offset = 0;
+  let part = 1;
+  while (offset < lines.length) {
+    const isFirst = part === 1;
+    const title = isFirst ? params.title : `${params.title} (cont. ${part})`;
+    const container = createBaseContainer(title);
+    if (isFirst) {
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `Total games: **${params.totalCount.toLocaleString("en-US")}**`,
+        ),
+      );
+    }
+
+    const reserved = isFirst ? 2 : 1;
+    const capacity = Math.max(1, COLLECTION_OVERVIEW_MAX_TEXT_COMPONENTS_PER_CONTAINER - reserved);
+    const chunk = lines.slice(offset, offset + capacity);
+    for (const line of chunk) {
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(line));
+    }
+
+    containers.push(container);
+    offset += chunk.length;
+    part += 1;
+  }
+
+  return containers;
 }
 
 type ResolvedCollectionGame =
@@ -4214,7 +4293,7 @@ export class CollectionCommand {
 
     if (showAll) {
       const messages = await buildAllCollectionsOverviewMessages();
-      const [first] = messages;
+      const [first, ...rest] = messages;
       if (!first) {
         await interaction.editReply("No collection entries yet.");
         return;
@@ -4224,6 +4303,13 @@ export class CollectionCommand {
         components: first.components,
         flags: buildComponentsV2Flags(isEphemeral),
       });
+
+      for (const message of rest) {
+        await interaction.followUp({
+          components: message.components,
+          flags: buildComponentsV2Flags(isEphemeral),
+        });
+      }
       return;
     }
 

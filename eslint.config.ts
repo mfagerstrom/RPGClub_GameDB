@@ -94,6 +94,7 @@ export default [
       "local/components-v2-structure": "error",
       "local/no-components-v2-with-content": "error",
       "local/require-components-v2-flag-with-v2-components": "error",
+      "local/dynamic-components-require-chunking": "error",
       "local/custom-id-has-matching-handler": "error",
     },
   },

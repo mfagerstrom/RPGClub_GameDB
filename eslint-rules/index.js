@@ -500,6 +500,33 @@ function isResolveAssetPathCall(node) {
   return false;
 }
 
+function getEnclosingFunctionName(node) {
+  let current = node?.parent ?? null;
+  while (current) {
+    if (current.type === "FunctionDeclaration" && current.id?.type === "Identifier") {
+      return current.id.name;
+    }
+    if (
+      current.type === "FunctionExpression" &&
+      current.id?.type === "Identifier"
+    ) {
+      return current.id.name;
+    }
+    if (current.type === "ArrowFunctionExpression") {
+      const parent = current.parent;
+      if (
+        parent &&
+        parent.type === "VariableDeclarator" &&
+        parent.id?.type === "Identifier"
+      ) {
+        return parent.id.name;
+      }
+    }
+    current = current.parent ?? null;
+  }
+  return null;
+}
+
 export default {
   rules: {
     "no-djs-button-in-v2-accessory": {
@@ -1495,6 +1522,61 @@ export default {
               return;
             }
             checkSendPayload(node, node.arguments[0]);
+          },
+        };
+      },
+    },
+    "dynamic-components-require-chunking": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Require explicit chunking helpers when message/payload builders assign dynamic components arrays.",
+        },
+        schema: [],
+        messages: {
+          requireChunking:
+            "Dynamic components arrays in builder functions must use an explicit chunking helper.",
+        },
+      },
+      create(context) {
+        const CHUNKING_NAME_PATTERN = /(chunk|split|paginate|partition)/i;
+        const BUILDER_NAME_PATTERN = /^build.*(Message|Messages|Payload|Response)/i;
+
+        const isChunkingCall = (node) => {
+          if (!node || node.type !== "CallExpression") return false;
+          const calleeName = getCalledFunctionName(node.callee);
+          if (!calleeName) return false;
+          return CHUNKING_NAME_PATTERN.test(calleeName);
+        };
+
+        const isInsideForOfLoop = (node) => {
+          let current = node?.parent ?? null;
+          while (current) {
+            if (current.type === "ForOfStatement" || current.type === "ForStatement") {
+              return true;
+            }
+            current = current.parent ?? null;
+          }
+          return false;
+        };
+
+        return {
+          Property(node) {
+            const keyName = getPropertyName(node.key);
+            if (keyName !== "components") return;
+            if (node.value.type === "ArrayExpression") return;
+            if (isChunkingCall(node.value)) return;
+
+            const functionName = getEnclosingFunctionName(node);
+            if (!functionName || !BUILDER_NAME_PATTERN.test(functionName)) return;
+
+            // Allow looping over pre-chunked message objects: for (const message of messages) ...
+            if (node.value.type === "MemberExpression" && isInsideForOfLoop(node)) {
+              return;
+            }
+
+            context.report({ node: node.value, messageId: "requireChunking" });
           },
         };
       },
