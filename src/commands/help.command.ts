@@ -249,7 +249,8 @@ const HELP_TOPICS: HelpTopic[] = [
       "and includes a Filter Results button for title/platform/ownership filters. " +
       "/collection overview summarizes totals by platform and supports showinchat to share the summary. " +
       "Steam import now supports session start/status/pause/resume/cancel, plus per-item " +
-      "review with per-candidate Choose buttons plus Search a different title/Enter GameDB ID/Skip/Pause. " +
+      "review with per-candidate Choose buttons plus Import First Match, Search a different title, " +
+      "Enter GameDB ID, Skip, and Pause. " +
       "Single exact matches auto-accept. Search a different title re-runs matching using a title you enter. " +
       "Enter GameDB ID accepts an existing GameDB ID or imports by IGDB numeric ID. " +
       "For ambiguous matches, the candidate list can include titles chosen previously by other users. " +
@@ -953,7 +954,7 @@ const GAME_COMPLETION_HELP_TOPICS: GameCompletionHelpTopic[] = [
     notes:
       "Server owner only. Use action:start with the CSV file to begin. " +
       "Export your CSV from Completionator using its Export or Download CSV option. " +
-      "During review, reply with a GameDB id, skip, or pause, and choose Update Existing " +
+      "During review, use Import First Match, reply with a GameDB id, skip, or pause, and choose Update Existing " +
       "when you want to sync the CSV data. Entries with a clear GameDB match and a " +
       "platform selection can auto add without confirmation.",
   },
@@ -1009,7 +1010,8 @@ const GAMEDB_HELP_TOPICS: GameDbHelpTopic[] = [
     summary: "Search IGDB and import a game into GameDB (open to all users).",
     syntax: "Syntax: /gamedb add title:<string> [igdb_id:<int>] [bulk_titles:<string>]",
     notes:
-      "Returns a dropdown of IGDB matches; if only one result, it imports automatically. " +
+      "Returns a dropdown of IGDB matches with the first option preselected plus an Import First Match button. " +
+      "If only one result, it imports automatically. " +
       "Use igdb_id to skip search or bulk_titles (comma-separated) to import up to 5 at once. " +
       "Duplicate titles already in GameDB show an 'already imported' message.",
   },
@@ -1020,8 +1022,8 @@ const GAMEDB_HELP_TOPICS: GameDbHelpTopic[] = [
     syntax:
       "Syntax: /gamedb csv-import action:<start|resume|status|pause|cancel> [file:<csv>]",
     notes:
-      "Use action:start with the CSV file to begin. Each row prompts for an IGDB match, " +
-      "manual IGDB id, or skip. Resume after restarts with action:resume.",
+      "Use action:start with the CSV file to begin. Each row prompts for an IGDB match " +
+      "with Import First Match, a manual IGDB id, or skip. Resume after restarts with action:resume.",
   },
   {
     id: "search",

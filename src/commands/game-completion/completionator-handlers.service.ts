@@ -444,12 +444,11 @@ export class CompletionatorHandlersService {
     }
 
     if (action === "igdb") {
-      const searchTitle = this.workflowService.stripCompletionatorYear(item.gameTitle);
       await this.workflowService.promptCompletionatorIgdbSelection(
         interaction,
         session,
         item,
-        searchTitle,
+        item.gameTitle,
       );
       return;
     }
@@ -824,132 +823,137 @@ export class CompletionatorHandlersService {
       return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
     const context = completionatorThreadContexts.get(
       getCompletionatorThreadKey(ownerId, session.importId),
     );
+    const shouldDeferForContext = Boolean(context?.message);
+    if (shouldDeferForContext) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
+    const cleanupDeferredReply = async (): Promise<void> => {
+      if (shouldDeferForContext) {
+        await interaction.deleteReply().catch(() => {});
+      }
+    };
 
-    if (kind === "gamedb-query") {
-      const normalized = this.workflowService.stripCompletionatorYear(rawValue);
-      const results = await searchGameDbWithFallback(normalized);
-      if (!results.length) {
-        const rows = this.uiService.buildCompletionatorNoMatchRows(
-          ownerId,
-          session.importId,
-          item.itemId,
-        );
-        await this.uiService.respondToImportInteraction(
+    try {
+      if (kind === "gamedb-query") {
+        const results = await searchGameDbWithFallback(rawValue);
+        if (!results.length) {
+          const rows = this.uiService.buildCompletionatorNoMatchRows(
+            ownerId,
+            session.importId,
+            item.itemId,
+          );
+          await this.uiService.respondToImportInteraction(
+            interaction,
+            {
+              components: this.uiService.buildCompletionatorComponents({
+                session,
+                item,
+                actionText:
+                  `No GameDB matches found for "${rawValue}". ` +
+                  "Use the buttons below to search again, skip, or pause.",
+                actionRows: rows,
+              }),
+            },
+            false,
+            context,
+          );
+          return;
+        }
+
+        if (results.length === 1) {
+          await this.uiService.respondToImportInteraction(
+            interaction,
+            {
+              components: this.uiService.buildCompletionatorWorkingComponents(),
+            },
+            false,
+            context,
+          );
+          await this.workflowService.handleCompletionatorMatch(
+            interaction,
+            session,
+            item,
+            results[0].id,
+            false,
+            context,
+          );
+          return;
+        }
+
+        await this.workflowService.renderCompletionatorGameDbResults(
           interaction,
-          {
-            components: this.uiService.buildCompletionatorComponents({
-              session,
-              item,
-              actionText:
-                `No GameDB matches found for "${rawValue}". ` +
-                "Use the buttons below to search again, skip, or pause.",
-              actionRows: rows,
-            }),
-          },
+          session,
+          item,
+          results,
           false,
           context,
         );
         return;
       }
 
-      if (results.length === 1) {
-        await this.uiService.respondToImportInteraction(
+      if (kind === "igdb-query") {
+        await this.workflowService.promptCompletionatorIgdbSelection(
           interaction,
-          {
-            components: this.uiService.buildCompletionatorWorkingComponents(),
-          },
-          false,
+          session,
+          item,
+          rawValue,
           context,
         );
+        return;
+      }
+
+      if (kind === "igdb-manual") {
+        const igdbId = Number(rawValue);
+        if (!Number.isInteger(igdbId) || igdbId <= 0) {
+          await updateImportItem(item.itemId, {
+            status: "ERROR",
+            errorText: "Invalid IGDB id entered.",
+          });
+          await this.workflowService.processNextCompletionatorItem(interaction, session, {
+            context,
+          });
+          return;
+        }
+
+        const imported = await importGameFromIgdb(igdbId);
         await this.workflowService.handleCompletionatorMatch(
           interaction,
           session,
           item,
-          results[0].id,
+          imported.gameId,
           false,
           context,
         );
         return;
       }
 
-      await this.workflowService.renderCompletionatorGameDbResults(
-        interaction,
-        session,
-        item,
-        results,
-        false,
-        context,
-      );
-      return;
-    }
+      if (kind === "gamedb-manual") {
+        const manualId = Number(rawValue);
+        if (!Number.isInteger(manualId) || manualId <= 0) {
+          await updateImportItem(item.itemId, {
+            status: "ERROR",
+            errorText: "Invalid GameDB id entered.",
+          });
+          await this.workflowService.processNextCompletionatorItem(interaction, session, {
+            context,
+          });
+          return;
+        }
 
-    if (kind === "igdb-query") {
-      await this.workflowService.promptCompletionatorIgdbSelection(
-        interaction,
-        session,
-        item,
-        rawValue,
-        context,
-      );
-      return;
-    }
-
-    if (kind === "igdb-manual") {
-      const igdbId = Number(rawValue);
-      if (!Number.isInteger(igdbId) || igdbId <= 0) {
-        await updateImportItem(item.itemId, {
-          status: "ERROR",
-          errorText: "Invalid IGDB id entered.",
-        });
-        await this.workflowService.processNextCompletionatorItem(interaction, session, {
+        await this.workflowService.handleCompletionatorMatch(
+          interaction,
+          session,
+          item,
+          manualId,
+          false,
           context,
-        });
-        return;
+        );
       }
-
-      const imported = await importGameFromIgdb(igdbId);
-      await this.workflowService.handleCompletionatorMatch(
-        interaction,
-        session,
-        item,
-        imported.gameId,
-        false,
-        context,
-      );
-      return;
-    }
-
-    if (kind === "gamedb-manual") {
-      const manualId = Number(rawValue);
-      if (!Number.isInteger(manualId) || manualId <= 0) {
-        await updateImportItem(item.itemId, {
-          status: "ERROR",
-          errorText: "Invalid GameDB id entered.",
-        });
-        await this.workflowService.processNextCompletionatorItem(interaction, session, {
-          context,
-        });
-        await interaction
-          .editReply({
-            content: "Updated.",
-          })
-          .catch(() => {});
-        return;
-      }
-
-      await this.workflowService.handleCompletionatorMatch(
-        interaction,
-        session,
-        item,
-        manualId,
-        false,
-        context,
-      );
+    } finally {
+      await cleanupDeferredReply();
     }
   }
 

@@ -170,6 +170,12 @@ function normalizeAutocompleteQuery(query: string): string {
   return query.trim().toLowerCase();
 }
 
+function foldAccentE(query: string): string {
+  return query
+    .replace(/[éèêë]/g, "e")
+    .replace(/[ÉÈÊË]/g, "E");
+}
+
 function buildAutocompleteCacheKey(query: string, limit: number): string {
   return `${limit}:${normalizeAutocompleteQuery(query)}`;
 }
@@ -1634,8 +1640,9 @@ export default class Game {
     }
 
     const lowerQuery = baseQuery.toLowerCase();
-    const normalizedQuery = lowerQuery.replace(/[^a-z0-9]/g, "");
-    if (!normalizedQuery && !/[a-z0-9]/.test(lowerQuery)) {
+    const foldedLowerQuery = foldAccentE(lowerQuery).toLowerCase();
+    const normalizedQuery = foldedLowerQuery.replace(/[^a-z0-9]/g, "");
+    if (!normalizedQuery && !/[a-z0-9]/.test(foldedLowerQuery)) {
       return [];
     }
 
@@ -1644,14 +1651,17 @@ export default class Game {
       const connection = await pool.getConnection();
       try {
         const binds = {
-          exactRaw: lowerQuery,
-          rawPrefix: `${lowerQuery}%`,
-          rawContains: `%${lowerQuery}%`,
+          exactRaw: foldedLowerQuery,
+          rawPrefix: `${foldedLowerQuery}%`,
+          rawContains: `%${foldedLowerQuery}%`,
           exactNorm: normalizedQuery || null,
           normPrefix: normalizedQuery ? `${normalizedQuery}%` : null,
           normContains: normalizedQuery ? `%${normalizedQuery}%` : null,
           limit: safeLimit,
         };
+        const titleFoldExpr =
+          "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(TITLE), 'é', 'e'), 'è', 'e'), 'ê', 'e'), 'ë', 'e')";
+        const titleNormExpr = `REGEXP_REPLACE(${titleFoldExpr}, '[^a-z0-9]', '')`;
 
         const result = await connection.execute<{
           GAME_ID: number;
@@ -1660,18 +1670,18 @@ export default class Game {
         }>(
           `SELECT GAME_ID, TITLE, INITIAL_RELEASE_DATE
              FROM GAMEDB_GAMES
-            WHERE LOWER(TITLE) LIKE :rawContains
+            WHERE ${titleFoldExpr} LIKE :rawContains
                OR (
                  :exactNorm IS NOT NULL AND
-                 REGEXP_REPLACE(LOWER(TITLE), '[^a-z0-9]', '') LIKE :normContains
+                 ${titleNormExpr} LIKE :normContains
                )
             ORDER BY CASE
-                       WHEN LOWER(TITLE) = :exactRaw THEN 0
-                       WHEN LOWER(TITLE) LIKE :rawPrefix THEN 1
+                       WHEN ${titleFoldExpr} = :exactRaw THEN 0
+                       WHEN ${titleFoldExpr} LIKE :rawPrefix THEN 1
                        WHEN :exactNorm IS NOT NULL AND
-                            REGEXP_REPLACE(LOWER(TITLE), '[^a-z0-9]', '') = :exactNorm THEN 2
+                            ${titleNormExpr} = :exactNorm THEN 2
                        WHEN :exactNorm IS NOT NULL AND
-                            REGEXP_REPLACE(LOWER(TITLE), '[^a-z0-9]', '') LIKE :normPrefix THEN 3
+                            ${titleNormExpr} LIKE :normPrefix THEN 3
                        ELSE 4
                      END,
                      TITLE ASC
@@ -1764,9 +1774,10 @@ export default class Game {
 
       const termSet = new Map<string, string>();
       Array.from(queryVariants).forEach((term) => {
-        const norm = term.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const folded = foldAccentE(term).toLowerCase();
+        const norm = folded.replace(/[^a-z0-9]/g, "");
         if (norm) {
-          termSet.set(norm, term);
+          termSet.set(norm, folded);
         }
       });
 
@@ -1777,13 +1788,16 @@ export default class Game {
       const termEntries = Array.from(termSet.entries());
       const clauses: string[] = [];
       const binds: Record<string, string> = {};
+      const titleFoldExpr =
+        "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(TITLE), 'é', 'e'), 'è', 'e'), 'ê', 'e'), 'ë', 'e')";
+      const titleNormExpr = `REGEXP_REPLACE(${titleFoldExpr}, '[^a-z0-9]', '')`;
       termEntries.forEach(([norm, term], index) => {
         const rawKey = `searchQuery${index}`;
         const normKey = `normalizedQuery${index}`;
-        binds[rawKey] = `%${term.toLowerCase()}%`;
+        binds[rawKey] = `%${term}%`;
         binds[normKey] = `%${norm}%`;
         clauses.push(
-          `(LOWER(TITLE) LIKE :${rawKey} OR REGEXP_REPLACE(LOWER(TITLE), '[^a-z0-9]', '') LIKE :${normKey})`,
+          `(${titleFoldExpr} LIKE :${rawKey} OR ${titleNormExpr} LIKE :${normKey})`,
         );
       });
 

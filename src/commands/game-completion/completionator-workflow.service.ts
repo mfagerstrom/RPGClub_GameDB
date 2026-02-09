@@ -5,7 +5,7 @@ import type {
   StringSelectMenuInteraction,
 } from "discord.js";
 import type { ContainerBuilder } from "@discordjs/builders";
-import Game from "../../classes/Game.js";
+import Game, { type IPlatformDef } from "../../classes/Game.js";
 import Member from "../../classes/Member.js";
 import type {
   CompletionatorAddFormState,
@@ -103,7 +103,7 @@ export class CompletionatorWorkflowService {
     ephemeral?: boolean,
     context?: CompletionatorThreadContext,
   ): Promise<void> {
-    const searchTitle = this.stripCompletionatorYear(item.gameTitle);
+    const searchTitle = item.gameTitle;
     const results = await searchGameDbWithFallback(searchTitle);
     if (!results.length) {
       const igdbContainer = await this.buildCompletionatorIgdbContainer(
@@ -204,7 +204,7 @@ export class CompletionatorWorkflowService {
         gameDbGameId: gameId,
       });
       item.gameDbGameId = gameId;
-      const platforms = await Game.getPlatformsForGameWithStandard(
+      let platforms = await Game.getPlatformsForGameWithStandard(
         gameId,
         STANDARD_PLATFORM_IDS,
       );
@@ -214,7 +214,8 @@ export class CompletionatorWorkflowService {
         gameId,
         interaction.user.id,
       );
-      this.resolveCompletionatorPlatformState(state, item, platforms);
+      const resolution = await this.resolveCompletionatorPlatformState(state, item, gameId, platforms);
+      platforms = resolution.platforms;
 
       if (this.canAutoAddCompletion(item, state)) {
         await this.addCompletionFromImport(interaction, session, item, state);
@@ -403,9 +404,10 @@ export class CompletionatorWorkflowService {
     components: Array<any>;
     files: any[];
   }> {
-    const platforms = await Game.getPlatformsForGameWithStandard(gameId, STANDARD_PLATFORM_IDS);
+    let platforms = await Game.getPlatformsForGameWithStandard(gameId, STANDARD_PLATFORM_IDS);
     const state = this.getOrCreateCompletionatorAddFormState(session, item, gameId, ownerId);
-    this.resolveCompletionatorPlatformState(state, item, platforms);
+    const resolution = await this.resolveCompletionatorPlatformState(state, item, gameId, platforms);
+    platforms = resolution.platforms;
 
     if (!platforms.length) {
       return {
@@ -484,7 +486,7 @@ export class CompletionatorWorkflowService {
       interaction,
       session,
       item,
-      this.stripCompletionatorYear(item.gameTitle),
+      item.gameTitle,
       context,
     );
     const actionRows = this.uiService.buildCompletionatorNoMatchRows(
@@ -727,25 +729,81 @@ export class CompletionatorWorkflowService {
     });
   }
 
-  resolveCompletionatorPlatformState(
+  async resolveCompletionatorPlatformState(
     state: CompletionatorAddFormState,
     item: ICompletionatorItem,
-    platforms: Array<{ id: number; name: string }>,
-  ): void {
-    if (state.platformId || state.otherPlatform) return;
+    gameId: number,
+    platforms: IPlatformDef[],
+  ): Promise<{ platforms: IPlatformDef[] }> {
+    if (state.platformId || state.otherPlatform) {
+      return { platforms };
+    }
 
     if (item.platformName) {
       const matchingId = this.uiService.resolvePlatformId(item.platformName, platforms);
       if (matchingId) {
         state.platformId = matchingId;
         state.otherPlatform = false;
-        return;
+        return { platforms };
+      }
+
+      const allPlatforms = await Game.getAllPlatforms();
+      const mappedPlatformId = this.uiService.resolvePlatformId(item.platformName, allPlatforms);
+      if (mappedPlatformId) {
+        const wasAdded = await this.ensureCompletionatorPlatformRelease(gameId, mappedPlatformId);
+        if (wasAdded) {
+          const refreshedPlatforms = await Game.getPlatformsForGameWithStandard(
+            gameId,
+            STANDARD_PLATFORM_IDS,
+          );
+          state.platformId = mappedPlatformId;
+          state.otherPlatform = false;
+          return { platforms: refreshedPlatforms };
+        }
       }
     }
 
     if (platforms.length === 1) {
       state.platformId = platforms[0].id;
       state.otherPlatform = false;
+    }
+    return { platforms };
+  }
+
+  private async ensureCompletionatorPlatformRelease(
+    gameId: number,
+    platformId: number,
+  ): Promise<boolean> {
+    const existingReleases = await Game.getGameReleases(gameId);
+    if (existingReleases.some((release) => release.platformId === platformId)) {
+      return false;
+    }
+
+    const game = await Game.getGameById(gameId);
+    let region = await Game.getRegionByCode("WW");
+    if (!region) {
+      region = await Game.ensureRegion(8);
+    }
+    if (!region) {
+      return false;
+    }
+
+    try {
+      await Game.addReleaseInfo(
+        gameId,
+        platformId,
+        region.id,
+        null,
+        game?.initialReleaseDate ?? null,
+        "Auto-added from Completionator import platform mapping.",
+      );
+      return true;
+    } catch (error: any) {
+      const message = String(error?.message ?? "");
+      if (message.includes("ORA-00001")) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -963,8 +1021,4 @@ export class CompletionatorWorkflowService {
     return null;
   }
 
-  stripCompletionatorYear(title: string): string {
-    const trimmed: string = title.trim();
-    return trimmed.replace(/\s*\([^)]*\)\s*$/, "").trim();
-  }
 }

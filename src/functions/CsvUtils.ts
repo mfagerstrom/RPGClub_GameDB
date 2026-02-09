@@ -1,3 +1,5 @@
+import { normalizeTitleWithSteps } from "./ImportTitleNormalization.js";
+
 export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = "";
@@ -63,10 +65,5 @@ export function stripTitleDateSuffix(value: string): string {
 
 export function normalizeTitleKey(value: string): string {
   const stripped = stripTitleDateSuffix(value);
-  return stripped
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeTitleWithSteps(stripped).toLowerCase();
 }

@@ -1,3 +1,11 @@
+# Commit snapshot (2026-02-08)
+
+a4ae0e7 2026-02-06 Failed experiment with xbox game library importing
+ff15e83 2026-02-06 fix: improvements to help text for imports
+603ece7 2026-02-06 issue-176: implemented game completion import from csv file
+306c641 2026-02-06 issue-182: improve completionator game completion import, enable more auto-matching
+38b4c1b 2026-02-06 fix: adjusted variables for IGDB scanning timing
+
 # Commit snapshot (2026-02-06)
 
 306c641 2026-02-06 issue-182: improve completionator game completion import, enable more auto-matching

@@ -1,7 +1,10 @@
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   MessageFlags,
   StringSelectMenuBuilder,
+  type ButtonInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
 
@@ -15,6 +18,7 @@ type Session = {
   emptyMessage?: string;
 };
 
+const IGDB_FIRST_MATCH_PREFIX = "igdb-first";
 // Leave room for prev/next navigation in the 25-option Discord limit.
 const PAGE_SIZE = 22; // 22 options + prev/next (up to 24) stays under 25
 const IGDB_SESSION_KEY = Symbol.for("igdbSelectSessions");
@@ -81,10 +85,11 @@ export function buildIgdbComponents(
     .setPlaceholder("Select a game from IGDB")
     .addOptions(
       hasOptions
-        ? pageOptions.map((opt) => ({
+        ? pageOptions.map((opt, index) => ({
           label: opt.label.slice(0, 100),
           value: String(opt.id),
           description: opt.description?.slice(0, 100),
+          default: page === 0 && index === 0,
         }))
         : [{
           label: "No IGDB matches found",
@@ -110,10 +115,21 @@ export function buildIgdbComponents(
     }
   }
 
-  return [
+  const rows: ActionRowBuilder<any>[] = [
     new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select),
-    ...(session.extraComponents ?? []),
   ];
+
+  if (hasOptions) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${IGDB_FIRST_MATCH_PREFIX}:${sessionId}`)
+        .setLabel("Import First Match")
+        .setStyle(ButtonStyle.Primary),
+    ));
+  }
+
+  rows.push(...(session.extraComponents ?? []));
+  return rows;
 }
 
 export function getIgdbSession(sessionId: string): Session | undefined {
@@ -194,6 +210,55 @@ export async function handleIgdbSelectInteraction(
       await interaction.deferUpdate().catch(() => {});
     }
     await session.onSelect(interaction, selected.gameId);
+  } finally {
+    getSessionStore().delete(sessionId);
+  }
+  return true;
+}
+
+export async function handleIgdbFirstMatchInteraction(
+  interaction: ButtonInteraction,
+): Promise<boolean> {
+  const [, sessionId] = interaction.customId.split(":");
+  if (!sessionId) return false;
+  const session = getSessionStore().get(sessionId);
+  if (!session) {
+    await interaction
+      .reply({
+        content: "This selection session has expired.",
+        flags: MessageFlags.Ephemeral,
+      })
+      .catch(() => {});
+    return true;
+  }
+
+  if (interaction.user.id !== session.ownerId) {
+    await interaction
+      .reply({
+        content: "This selection isn't for you.",
+        flags: MessageFlags.Ephemeral,
+      })
+      .catch(() => {});
+    return true;
+  }
+
+  const firstOption = session.options[0];
+  if (!firstOption) {
+    const message = session.emptyMessage ??
+      "No IGDB matches found. Try Search a different title.";
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral }).catch(() => {});
+    } else {
+      await interaction.reply({ content: message, flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
+    return true;
+  }
+
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferUpdate().catch(() => {});
+    }
+    await session.onSelect(interaction as unknown as StringSelectMenuInteraction, firstOption.id);
   } finally {
     getSessionStore().delete(sessionId);
   }

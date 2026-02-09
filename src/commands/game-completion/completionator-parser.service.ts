@@ -3,6 +3,7 @@
 import axios from "axios";
 import type { CompletionType } from "../profile.command.js";
 import Game from "../../classes/Game.js";
+import { buildProgressiveTitleVariants, normalizeTitleWithSteps } from "../../functions/ImportTitleNormalization.js";
 
 export async function fetchCsv(url: string): Promise<string | null> {
   try {
@@ -127,36 +128,20 @@ export function parseCompletionatorDate(value: string | undefined): Date | null 
   return new Date(year, month - 1, day);
 }
 
-export function stripCompletionatorYear(title: string): string {
-  const trimmed: string = title.trim();
-  return trimmed.replace(/\s*\([^)]*\)\s*$/, "").trim();
-}
-
 export async function searchGameDbWithFallback(
   rawTitle: string,
 ): Promise<Awaited<ReturnType<typeof Game.searchGames>>> {
-  const normalizedTitle = normalizeTitleForSearch(rawTitle);
-  if (normalizedTitle) {
-    const normalizedResults = await Game.searchGames(normalizedTitle);
-    if (normalizedResults.length === 1) {
-      return normalizedResults;
-    }
-  }
-
-  const primaryResults = await Game.searchGames(rawTitle);
-  if (primaryResults.length) {
-    return primaryResults;
-  }
-
-  if (normalizedTitle && normalizedTitle !== rawTitle) {
-    const normalizedResults = await Game.searchGames(normalizedTitle);
-    if (normalizedResults.length) {
-      return normalizedResults;
-    }
-  }
-
-  const variants = buildTitleVariants(rawTitle, normalizedTitle);
+  const variants = buildProgressiveTitleVariants(rawTitle);
   for (const variant of variants) {
+    const results = await Game.searchGames(variant);
+    if (results.length) {
+      return results;
+    }
+  }
+
+  const normalizedTitle = normalizeTitleWithSteps(rawTitle);
+  const titleVariants = buildTitleVariants(rawTitle, normalizedTitle);
+  for (const variant of titleVariants) {
     const variantResults = await Game.searchGames(variant);
     if (variantResults.length) {
       return variantResults;
@@ -183,19 +168,6 @@ export async function searchGameDbWithFallback(
   }
 
   return Array.from(resultMap.values());
-}
-
-function normalizeTitleForSearch(title: string): string {
-  const normalized = title
-    .toLowerCase()
-    .replace(/[-–—]/g, " ")
-    .replace(/:/g, " ")
-    .replace(/^(the|a|an)\s+/i, "")
-    .replace(/\s+(the|a|an)\s+/gi, " ")
-    .replace(/[^\p{L}\p{N}'-]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return normalized;
 }
 
 function buildTitleVariants(rawTitle: string, normalizedTitle: string): string[] {

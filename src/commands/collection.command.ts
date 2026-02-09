@@ -87,6 +87,10 @@ import {
   sanitizeUserInput,
 } from "../functions/InteractionUtils.js";
 import {
+  buildProgressiveTitleVariants,
+  normalizeTitleWithSteps,
+} from "../functions/ImportTitleNormalization.js";
+import {
   COMPLETION_TYPES,
   type CompletionType,
   formatTableDate,
@@ -602,23 +606,9 @@ function buildImportMatchConfidence(
   return candidates[0].title.toLowerCase() === searchTitle.toLowerCase() ? "EXACT" : "FUZZY";
 }
 
-function normalizeImportTitleForSearch(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/\s*\((?:19|20)\d{2}\)\s*/g, " ")
-    .replace(/[™®]/g, "")
-    .replace(/[-–—]/g, " ")
-    .replace(/:/g, " ")
-    .replace(/^(the|a|an)\s+/i, "")
-    .replace(/\s+(the|a|an)\s+/gi, " ")
-    .replace(/[^\p{L}\p{N}'-]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function isExactImportTitleMatch(sourceTitle: string, gameDbTitle: string): boolean {
-  return normalizeImportTitleForSearch(sourceTitle).toLowerCase() ===
-    normalizeImportTitleForSearch(gameDbTitle).toLowerCase();
+  return normalizeTitleWithSteps(sourceTitle).toLowerCase() ===
+    normalizeTitleWithSteps(gameDbTitle).toLowerCase();
 }
 
 async function buildImportCandidates(title: string): Promise<ImportCandidate[]> {
@@ -640,27 +630,32 @@ async function buildImportCandidates(title: string): Promise<ImportCandidate[]> 
     return Math.floor((matchedWords / searchWords.length) * 60);
   }
 
-  const search = normalizeImportTitleForSearch(
-    sanitizeUserInput(title, { preserveNewlines: false }),
-  );
-  if (!search) return [];
+  const rawSearch = sanitizeUserInput(title, { preserveNewlines: false });
+  const variants = buildProgressiveTitleVariants(rawSearch);
+  if (!variants.length) return [];
 
-  const results = await Game.searchGames(search);
-  if (!results.length) return [];
+  for (const variant of variants) {
+    const results = await Game.searchGames(variant);
+    if (!results.length) {
+      continue;
+    }
 
-  const normalizedSearch = normalizeCandidate(search);
-  const ranked = results
-    .map((game) => ({
-      gameId: game.id,
-      title: game.title,
-      score: scoreCandidate(normalizedSearch, normalizeCandidate(game.title)),
-    }))
-    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
-    .filter((entry, index) => entry.score > 0 || index < 3)
-    .slice(0, 10)
-    .map((entry) => ({ gameId: entry.gameId, title: entry.title }));
+    const normalizedSearch = normalizeCandidate(variant);
+    const ranked = results
+      .map((game) => ({
+        gameId: game.id,
+        title: game.title,
+        score: scoreCandidate(normalizedSearch, normalizeCandidate(game.title)),
+      }))
+      .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+      .filter((entry, index) => entry.score > 0 || index < 3)
+      .slice(0, 10)
+      .map((entry) => ({ gameId: entry.gameId, title: entry.title }));
 
-  return dedupeImportCandidates(ranked);
+    return dedupeImportCandidates(ranked);
+  }
+
+  return [];
 }
 
 async function buildImportCandidatesFromMappedIds(gameIds: number[]): Promise<ImportCandidate[]> {
@@ -674,6 +669,24 @@ async function buildImportCandidatesFromMappedIds(gameIds: number[]): Promise<Im
     .filter((game): game is NonNullable<typeof game> => Boolean(game))
     .map((game) => ({ gameId: game.id, title: game.title }));
   return dedupeImportCandidates(ordered);
+}
+
+async function searchIgdbWithProgressiveTitleVariants(
+  title: string,
+  limit: number,
+): Promise<IGDBGame[]> {
+  const rawSearch = sanitizeUserInput(title, { preserveNewlines: false });
+  const variants = buildProgressiveTitleVariants(rawSearch);
+  if (!variants.length) return [];
+
+  for (const variant of variants) {
+    const results = await igdbService.searchGames(variant, limit);
+    if (results.results.length) {
+      return results.results;
+    }
+  }
+
+  return [];
 }
 
 function buildSteamImportItemMessage(params: {
@@ -2204,11 +2217,10 @@ export class CollectionCommand {
     }
 
     try {
-      const igdbSearchTitle = normalizeImportTitleForSearch(nextItem.steamAppName);
-      const igdbSearch = await igdbService.searchGames(igdbSearchTitle, 10);
-      igdbHasResults = igdbSearch.results.length > 0;
+      const igdbResults = await searchIgdbWithProgressiveTitleVariants(nextItem.steamAppName, 10);
+      igdbHasResults = igdbResults.length > 0;
       const options = igdbHasResults
-        ? await buildCollectionIgdbSelectOptions(igdbSearch.results)
+        ? await buildCollectionIgdbSelectOptions(igdbResults)
         : [];
       const igdbSession = createIgdbSession(
         ownerId,
@@ -2606,11 +2618,10 @@ export class CollectionCommand {
     }
 
     try {
-      const igdbSearchTitle = normalizeImportTitleForSearch(nextItem.rawTitle);
-      const igdbSearch = await igdbService.searchGames(igdbSearchTitle, 10);
-      igdbHasResults = igdbSearch.results.length > 0;
+      const igdbResults = await searchIgdbWithProgressiveTitleVariants(nextItem.rawTitle, 10);
+      igdbHasResults = igdbResults.length > 0;
       const options = igdbHasResults
-        ? await buildCollectionIgdbSelectOptions(igdbSearch.results)
+        ? await buildCollectionIgdbSelectOptions(igdbResults)
         : [];
       const igdbSession = createIgdbSession(
         ownerId,
@@ -4203,7 +4214,7 @@ export class CollectionCommand {
 
     if (showAll) {
       const messages = await buildAllCollectionsOverviewMessages();
-      const [first, ...rest] = messages;
+      const [first] = messages;
       if (!first) {
         await interaction.editReply("No collection entries yet.");
         return;
@@ -4213,13 +4224,6 @@ export class CollectionCommand {
         components: first.components,
         flags: buildComponentsV2Flags(isEphemeral),
       });
-
-      for (const message of rest) {
-        await interaction.followUp({
-          components: message.components,
-          flags: buildComponentsV2Flags(isEphemeral),
-        });
-      }
       return;
     }
 
