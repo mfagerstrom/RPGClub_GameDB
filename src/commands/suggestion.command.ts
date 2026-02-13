@@ -174,11 +174,6 @@ function buildSuggestionReviewDecisionComponents(
             value: "reject",
             description: "Reject and notify the suggestion author",
           },
-          {
-            label: "Skip",
-            value: "skip",
-            description: "Keep this suggestion pending and move to the next",
-          },
         ],
       },
     },
@@ -832,9 +827,9 @@ export class SuggestionCommand {
 
     const rawDecision = submit?.values[SUGGESTION_REVIEW_DECISION_ID];
     const decision = typeof rawDecision === "string" ? rawDecision : fallbackExtracted.decision;
-    if (decision !== "accept" && decision !== "reject" && decision !== "skip") {
+    if (decision !== "accept" && decision !== "reject") {
       await safeReply(interaction, {
-        content: "Select Accept, Reject, or Skip.",
+        content: "Select Accept or Reject.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -908,16 +903,12 @@ export class SuggestionCommand {
         );
       }
 
-    } else {
-      // Skip keeps suggestion pending; reviewer can open the next form from /todo.
     }
 
     const remainingCount = await countSuggestions();
     const outcomeLabel = decision === "accept"
       ? "Accepted."
-      : decision === "reject"
-        ? "Rejected."
-        : "Skipped.";
+      : "Rejected.";
     await safeReply(interaction, {
       content: remainingCount > 0
         ? `${outcomeLabel} ${remainingCount} suggestion(s) remain. Use Review Suggestions again from /todo.`
