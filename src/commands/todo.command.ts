@@ -16,6 +16,7 @@ import {
 import {
   ButtonBuilder as V2ButtonBuilder,
   ContainerBuilder,
+  LabelBuilder,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   SectionBuilder,
@@ -85,9 +86,6 @@ const TODO_LIST_ID_PREFIX = "todo-list-page";
 const TODO_LIST_BACK_ID_PREFIX = "todo-list-back";
 const TODO_VIEW_ID_PREFIX = "todo-view";
 const TODO_CREATE_BUTTON_PREFIX = "todo-create-button";
-const TODO_CREATE_LABEL_PREFIX = "todo-create-label";
-const TODO_CREATE_SUBMIT_PREFIX = "todo-create-submit";
-const TODO_CREATE_CANCEL_PREFIX = "todo-create-cancel";
 const TODO_CREATE_MODAL_PREFIX = "todo-create-modal";
 const TODO_CLOSE_BUTTON_PREFIX = "todo-close-button";
 const TODO_CLOSE_SELECT_PREFIX = "todo-close-select";
@@ -110,7 +108,14 @@ const TODO_QUERY_MODAL_PREFIX = "todo-query-modal";
 const TODO_QUERY_INPUT_ID = "todo-query-input";
 const TODO_CREATE_TITLE_ID = "todo-create-title";
 const TODO_CREATE_BODY_ID = "todo-create-body";
+const TODO_CREATE_TYPE_ID = "todo-create-type";
 const TODO_PAYLOAD_TOKEN_MAX_LENGTH = 30;
+const TODO_CREATE_TYPE_LABELS = [
+  "New Feature",
+  "Improvement",
+  "Bug",
+  "Blocked",
+] as const;
 
 async function getSuggestionReviewCount(): Promise<number> {
   try {
@@ -132,19 +137,6 @@ type TodoListPayload = {
   direction: ListDirection;
   isPublic: boolean;
 };
-
-type TodoCreateSession = {
-  userId: string;
-  payloadToken: string;
-  page: number;
-  channelId: string;
-  messageId: string;
-  title: string;
-  body: string;
-  labels: TodoLabel[];
-};
-
-const todoCreateSessions = new Map<string, TodoCreateSession>();
 
 const TODO_LABEL_CODE_MAP: Record<TodoLabel, string> = {
   "New Feature": "N",
@@ -654,8 +646,10 @@ function buildTodoCreateButtonId(payloadToken: string, page: number): string {
 function buildTodoCreateModalId(
   payloadToken: string,
   page: number,
+  channelId: string,
+  messageId: string,
 ): string {
-  return [TODO_CREATE_MODAL_PREFIX, payloadToken, page].join(":");
+  return [TODO_CREATE_MODAL_PREFIX, payloadToken, page, channelId, messageId].join(":");
 }
 
 function buildTodoCloseButtonId(payloadToken: string, page: number): string {
@@ -673,18 +667,6 @@ function buildTodoCloseSelectId(
 
 function buildTodoCloseCancelId(payloadToken: string, page: number): string {
   return [TODO_CLOSE_CANCEL_PREFIX, payloadToken, page].join(":");
-}
-
-function buildTodoCreateLabelId(sessionId: string): string {
-  return [TODO_CREATE_LABEL_PREFIX, sessionId].join(":");
-}
-
-function buildTodoCreateSubmitId(sessionId: string): string {
-  return [TODO_CREATE_SUBMIT_PREFIX, sessionId].join(":");
-}
-
-function buildTodoCreateCancelId(sessionId: string): string {
-  return [TODO_CREATE_CANCEL_PREFIX, sessionId].join(":");
 }
 
 function buildTodoCommentButtonId(payloadToken: string, page: number, issueNumber: number): string {
@@ -831,36 +813,21 @@ function parseTodoCreateButtonId(
 function parseTodoCreateModalId(
   id: string,
   prefix: string,
-): { payloadToken: string; page: number } | null {
+): { payloadToken: string; page: number; channelId: string; messageId: string } | null {
   const parts = id.split(":");
-  if (parts.length !== 3 || parts[0] !== prefix) {
+  if (parts.length !== 5 || parts[0] !== prefix) {
     return null;
   }
 
   const payloadToken = parts[1];
   const page = Number(parts[2]);
-  if (!payloadToken || !page) {
+  const channelId = parts[3];
+  const messageId = parts[4];
+  if (!payloadToken || !page || !channelId || !messageId) {
     return null;
   }
 
-  return { payloadToken, page };
-}
-
-function parseTodoCreateSessionId(
-  id: string,
-  prefix: string,
-): { sessionId: string } | null {
-  const parts = id.split(":");
-  if (parts.length !== 2 || parts[0] !== prefix) {
-    return null;
-  }
-
-  const sessionId = parts[1];
-  if (!sessionId) {
-    return null;
-  }
-
-  return { sessionId };
+  return { payloadToken, page, channelId, messageId };
 }
 
 function parseTodoCloseId(
@@ -1043,87 +1010,20 @@ function parseTodoFilterId(
   return { payloadToken, page };
 }
 
+function parseTodoCreateTypeLabels(values: readonly string[]): TodoLabel[] {
+  const validValues = new Set(TODO_CREATE_TYPE_LABELS);
+  return values
+    .filter((value): value is (typeof TODO_CREATE_TYPE_LABELS)[number] => validValues.has(
+      value as (typeof TODO_CREATE_TYPE_LABELS)[number],
+    ))
+    .filter((value, index, arr) => arr.indexOf(value) === index);
+}
+
 async function replyTodoExpired(interaction: AnyRepliable): Promise<void> {
   await safeReply(interaction, {
     content: "This /todo view expired. Run /todo again to refresh it.",
     flags: MessageFlags.Ephemeral,
   });
-}
-
-function createTodoCreateSession(
-  userId: string,
-  payloadToken: string,
-  page: number,
-  channelId: string,
-  messageId: string,
-  title: string,
-  body: string,
-): string {
-  const sessionId = `todo-create-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-  todoCreateSessions.set(sessionId, {
-    userId,
-    payloadToken,
-    page,
-    channelId,
-    messageId,
-    title,
-    body,
-    labels: [],
-  });
-  return sessionId;
-}
-
-function getTodoCreateSession(sessionId: string): TodoCreateSession | null {
-  return todoCreateSessions.get(sessionId) ?? null;
-}
-
-function buildTodoCreateFormComponents(
-  session: TodoCreateSession,
-  createSessionId: string,
-): { components: Array<ContainerBuilder | ActionRowBuilder<any>> } {
-  const container = new ContainerBuilder();
-  container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("## Create GitHub Issue"),
-  );
-
-  const titleText = session.title ? session.title : "*No title set.*";
-  const bodyText = session.body ? session.body : "*No description provided.*";
-  const labelText = session.labels.length ? session.labels.join(", ") : "None";
-
-  container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(
-      `**Title:**\n${titleText}\n\n**Description:**\n${bodyText}\n\n**Labels:**\n${labelText}`,
-    ),
-  );
-
-  const labelSelect = new StringSelectMenuBuilder()
-    .setCustomId(buildTodoCreateLabelId(createSessionId))
-    .setPlaceholder("Select Labels (multi-select)")
-    .setMinValues(0)
-    .setMaxValues(TODO_LABELS.length)
-    .addOptions(
-      TODO_LABELS.map((label) => ({
-        label,
-        value: label,
-        default: session.labels.includes(label),
-      })),
-    );
-
-  const labelRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(labelSelect);
-
-  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(buildTodoCreateSubmitId(createSessionId))
-      .setLabel("Create")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(!session.title.trim().length),
-    new ButtonBuilder()
-      .setCustomId(buildTodoCreateCancelId(createSessionId))
-      .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  return { components: [container, labelRow, actionRow] };
 }
 
 function buildIssueListComponents(
@@ -1612,7 +1512,14 @@ export class TodoCommand {
     if (!ok) return;
 
     const modal = new ModalBuilder()
-      .setCustomId(buildTodoCreateModalId(parsed.payloadToken, parsed.page))
+      .setCustomId(
+        buildTodoCreateModalId(
+          parsed.payloadToken,
+          parsed.page,
+          interaction.channelId,
+          interaction.message?.id ?? "",
+        ),
+      )
       .setTitle("Create GitHub Issue");
 
     const titleInput = new TextInputBuilder()
@@ -1629,9 +1536,26 @@ export class TodoCommand {
       .setRequired(true)
       .setMaxLength(MAX_ISSUE_BODY);
 
+    const typeLabel = new LabelBuilder()
+      .setLabel("Issue Type(s)")
+      .setDescription("Select one or more issue types")
+      .setStringSelectMenuComponent((builder) =>
+        builder
+          .setCustomId(TODO_CREATE_TYPE_ID)
+          .setPlaceholder("Select type(s)")
+          .setMinValues(1)
+          .setMaxValues(TODO_CREATE_TYPE_LABELS.length)
+          .addOptions(
+            TODO_CREATE_TYPE_LABELS.map((label) => ({
+              label,
+              value: label,
+            })),
+          ));
+
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput),
+      typeLabel,
     );
 
     await interaction.showModal(modal);
@@ -1915,154 +1839,7 @@ export class TodoCommand {
     });
   }
 
-  @SelectMenuComponent({ id: /^todo-create-label:todo-create-\d+-\d+$/ })
-  async setCreateLabels(interaction: StringSelectMenuInteraction): Promise<void> {
-    const parsed = parseTodoCreateSessionId(interaction.customId, TODO_CREATE_LABEL_PREFIX);
-    if (!parsed) {
-      await safeUpdate(interaction, {
-        components: [],
-        content: "This create form expired.",
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    const session = getTodoCreateSession(parsed.sessionId);
-    if (!session || session.userId !== interaction.user.id) {
-      await safeUpdate(interaction, {
-        components: [],
-        content: "This create form expired.",
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    const selectedValues = interaction.values;
-    session.labels = selectedValues
-      .map((value) => TODO_LABELS.find((label) => label === value))
-      .filter((label): label is TodoLabel => Boolean(label));
-    todoCreateSessions.set(parsed.sessionId, session);
-
-    const formPayload = buildTodoCreateFormComponents(session, parsed.sessionId);
-    await safeUpdate(interaction, {
-      ...formPayload,
-      flags: buildComponentsV2Flags(true),
-    });
-  }
-
-  @ButtonComponent({ id: /^todo-create-submit:todo-create-\d+-\d+$/ })
-  async submitCreateFromForm(interaction: ButtonInteraction): Promise<void> {
-    const parsed = parseTodoCreateSessionId(interaction.customId, TODO_CREATE_SUBMIT_PREFIX);
-    if (!parsed) {
-      await safeUpdate(interaction, {
-        components: [],
-        content: "This create form expired.",
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    const session = getTodoCreateSession(parsed.sessionId);
-    if (!session || session.userId !== interaction.user.id) {
-      await safeUpdate(interaction, {
-        components: [],
-        content: "This create form expired.",
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    const ok = await requireModeratorOrAdminOrOwner(interaction);
-    if (!ok) return;
-
-    try {
-      await interaction.deferUpdate();
-    } catch {
-      // ignore
-    }
-
-    const trimmedTitle = sanitizeTodoRichText(session.title).trim();
-    if (!trimmedTitle) {
-      await safeUpdate(interaction, {
-        content: "Title cannot be empty.",
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    const trimmedBody = session.body
-      ? sanitizeTodoRichText(session.body)
-      : undefined;
-    const baseBody = trimmedBody ?? "";
-    const isOwner = interaction.guild?.ownerId === interaction.user.id;
-    const prefixedBody = isOwner ? baseBody : `${interaction.user.username}: ${baseBody}`;
-    const finalBody = prefixedBody.length ? prefixedBody.slice(0, MAX_ISSUE_BODY) : null;
-
-    try {
-      await createIssue({
-        title: trimmedTitle,
-        body: finalBody,
-        labels: session.labels,
-      });
-    } catch (err: any) {
-      await safeUpdate(interaction, {
-        content: getGithubErrorMessage(err),
-        components: [],
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    const listPayload = await this.buildTodoListPayload(session.payloadToken, session.page);
-    if (!listPayload) {
-      return;
-    }
-
-    const channel = interaction.client.channels.cache.get(session.channelId);
-    if (channel && "messages" in channel) {
-      try {
-        const message = await (channel as any).messages.fetch(session.messageId);
-        await message.edit({
-          components: listPayload.components,
-        });
-      } catch {
-        // ignore refresh failures
-      }
-    }
-
-    todoCreateSessions.delete(parsed.sessionId);
-    try {
-      await interaction.deleteReply();
-    } catch {
-      // ignore
-    }
-  }
-
-  @ButtonComponent({ id: /^todo-create-cancel:todo-create-\d+-\d+$/ })
-  async cancelCreateFromForm(interaction: ButtonInteraction): Promise<void> {
-    const parsed = parseTodoCreateSessionId(interaction.customId, TODO_CREATE_CANCEL_PREFIX);
-    if (!parsed) {
-      await safeUpdate(interaction, {
-        components: [],
-        content: "This create form expired.",
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    todoCreateSessions.delete(parsed.sessionId);
-    try {
-      await interaction.deleteReply();
-    } catch {
-      await safeUpdate(interaction, {
-        content: "Create issue cancelled.",
-        components: [],
-        flags: buildComponentsV2Flags(true),
-      });
-    }
-  }
-
-  @ModalComponent({ id: /^todo-create-modal:[^:]+:\d+$/ })
+  @ModalComponent({ id: /^todo-create-modal:[^:]+:\d+:\d+:\d+$/ })
   async submitCreateModal(interaction: ModalSubmitInteraction): Promise<void> {
     const parsed = parseTodoCreateModalId(interaction.customId, TODO_CREATE_MODAL_PREFIX);
     if (!parsed) {
@@ -2076,8 +1853,13 @@ export class TodoCommand {
     const ok = await requireModeratorOrAdminOrOwner(interaction);
     if (!ok) return;
 
+    await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+
     const rawTitle = interaction.fields.getTextInputValue(TODO_CREATE_TITLE_ID);
     const rawBody = interaction.fields.getTextInputValue(TODO_CREATE_BODY_ID);
+    const selectedTypes = parseTodoCreateTypeLabels(
+      interaction.fields.getStringSelectValues(TODO_CREATE_TYPE_ID),
+    );
     const trimmedTitle = sanitizeTodoRichText(rawTitle).trim();
     if (!trimmedTitle) {
       await safeReply(interaction, {
@@ -2098,30 +1880,56 @@ export class TodoCommand {
       return;
     }
 
-    const baseBody = trimmedBody;
-    const sessionId = createTodoCreateSession(
-      interaction.user.id,
-      parsed.payloadToken,
-      parsed.page,
-      interaction.channelId ?? "",
-      interaction.message?.id ?? "",
-      trimmedTitle,
-      baseBody.slice(0, MAX_ISSUE_BODY),
-    );
-    const session = getTodoCreateSession(sessionId);
-    if (!session) {
+    if (selectedTypes.length === 0) {
       await safeReply(interaction, {
-        content: "Unable to start issue creation.",
+        content: "Select at least one issue type.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const formPayload = buildTodoCreateFormComponents(session, sessionId);
-    await safeReply(interaction, {
-      ...formPayload,
-      flags: buildComponentsV2Flags(true),
-    });
+    const baseBody = trimmedBody;
+    const isOwner = interaction.guild?.ownerId === interaction.user.id;
+    const prefixedBody = isOwner ? baseBody : `${interaction.user.username}: ${baseBody}`;
+    const finalBody = prefixedBody.length ? prefixedBody.slice(0, MAX_ISSUE_BODY) : null;
+
+    try {
+      await createIssue({
+        title: trimmedTitle,
+        body: finalBody,
+        labels: selectedTypes,
+      });
+    } catch (err: any) {
+      await safeReply(interaction, {
+        content: getGithubErrorMessage(err),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const listPayload = await this.buildTodoListPayload(parsed.payloadToken, parsed.page);
+    if (!listPayload) {
+      await replyTodoExpired(interaction);
+      return;
+    }
+
+    const channel = interaction.client.channels.cache.get(parsed.channelId);
+    if (channel && "messages" in channel) {
+      try {
+        const message = await (channel as any).messages.fetch(parsed.messageId);
+        await message.edit({
+          components: listPayload.components,
+        });
+      } catch {
+        // ignore refresh failures
+      }
+    }
+
+    try {
+      await interaction.deleteReply();
+    } catch {
+      // ignore
+    }
   }
 
   @ModalComponent({ id: /^todo-comment-modal:[^:]+:\d+:\d+:\d+:\d+$/ })
