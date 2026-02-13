@@ -1555,8 +1555,8 @@ export class TodoCommand {
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput),
-      typeLabel,
     );
+    modal.addLabelComponents(typeLabel);
 
     await interaction.showModal(modal);
   }
