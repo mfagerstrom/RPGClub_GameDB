@@ -76,6 +76,7 @@ export default [
         message: "Please use gotoAndCheckUrl instead of page.waitForURL",
       }],
       "local/no-djs-button-in-v2-accessory": "error",
+      "local/prefer-safe-interaction-methods": "warn",
       "local/no-deprecated-interaction-options": "error",
       "local/no-silent-interaction-update-catch": "error",
       "local/no-edit-reply-on-modal-union": "error",

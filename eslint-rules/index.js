@@ -11,6 +11,15 @@ const INTERACTION_RESPONSE_HELPERS = new Set([
   "safeDeferReply",
   "safeUpdate",
   "safeFollowUp",
+  "safeDeferUpdate",
+]);
+const DIRECT_INTERACTION_METHODS = new Set([
+  "reply",
+  "deferReply",
+  "editReply",
+  "followUp",
+  "update",
+  "deferUpdate",
 ]);
 const DEPRECATED_RESPONSE_OPTION_KEYS = new Set(["ephemeral", "fetchReply"]);
 const INTERACTION_DECORATORS = new Set([
@@ -529,6 +538,53 @@ function getEnclosingFunctionName(node) {
 
 export default {
   rules: {
+    "prefer-safe-interaction-methods": {
+      meta: {
+        type: "suggestion",
+        docs: {
+          description:
+            "Prefer safe interaction helpers over direct interaction response methods.",
+        },
+        schema: [],
+        messages: {
+          useSafeMethod:
+            "Use safe interaction helpers from InteractionUtils instead of direct interaction.{{method}} calls.",
+        },
+      },
+      create(context) {
+        const fileName = normalizePathText(context.getFilename?.() ?? "");
+        if (fileName.endsWith("/src/functions/interactionutils.ts")) {
+          return {};
+        }
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee.type !== "MemberExpression" ||
+              callee.property.type !== "Identifier"
+            ) {
+              return;
+            }
+
+            const methodName = callee.property.name;
+            if (!DIRECT_INTERACTION_METHODS.has(methodName)) {
+              return;
+            }
+
+            if (callee.object.type !== "Identifier" || callee.object.name !== "interaction") {
+              return;
+            }
+
+            context.report({
+              node: callee.property,
+              messageId: "useSafeMethod",
+              data: { method: methodName },
+            });
+          },
+        };
+      },
+    },
     "no-djs-button-in-v2-accessory": {
       meta: {
         type: "problem",
