@@ -92,6 +92,8 @@ const TODO_CLOSE_CANCEL_PREFIX = "todo-close-cancel";
 const TODO_COMMENT_BUTTON_PREFIX = "todo-comment-button";
 const TODO_COMMENT_MODAL_PREFIX = "todo-comment-modal";
 const TODO_COMMENT_INPUT_ID = "todo-comment-input";
+const TODO_EDIT_VIEW_BUTTON_PREFIX = "todo-edit-view-button";
+const TODO_EDIT_VIEW_MODAL_PREFIX = "todo-edit-view-modal";
 const TODO_EDIT_TITLE_BUTTON_PREFIX = "todo-edit-title-button";
 const TODO_EDIT_TITLE_MODAL_PREFIX = "todo-edit-title-modal";
 const TODO_EDIT_TITLE_INPUT_ID = "todo-edit-title-input";
@@ -672,6 +674,20 @@ function buildTodoCommentButtonId(payloadToken: string, page: number, issueNumbe
   return [TODO_COMMENT_BUTTON_PREFIX, payloadToken, page, issueNumber].join(":");
 }
 
+function buildTodoEditViewButtonId(payloadToken: string, page: number, issueNumber: number): string {
+  return [TODO_EDIT_VIEW_BUTTON_PREFIX, payloadToken, page, issueNumber].join(":");
+}
+
+function buildTodoEditViewModalId(
+  payloadToken: string,
+  page: number,
+  issueNumber: number,
+  channelId: string,
+  messageId: string,
+): string {
+  return [TODO_EDIT_VIEW_MODAL_PREFIX, payloadToken, page, issueNumber, channelId, messageId].join(":");
+}
+
 function buildTodoCommentModalId(
   payloadToken: string,
   page: number,
@@ -1207,16 +1223,8 @@ function buildIssueViewComponents(
       .setLabel("Add Comment")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(buildTodoEditTitleButtonId(payloadToken, payload.page, issue.number))
-      .setLabel("Edit Title")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(buildTodoEditDescButtonId(payloadToken, payload.page, issue.number))
-      .setLabel("Edit Description")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(buildTodoLabelEditButtonId(payloadToken, payload.page, issue.number))
-      .setLabel("Add/Edit Labels")
+      .setCustomId(buildTodoEditViewButtonId(payloadToken, payload.page, issue.number))
+      .setLabel("Edit")
       .setStyle(ButtonStyle.Secondary),
     stateButton,
   );
@@ -2033,6 +2041,124 @@ export class TodoCommand {
     }
   }
 
+  @ModalComponent({ id: /^todo-edit-view-modal:[^:]+:\d+:\d+:\d+:\d+$/ })
+  async submitEditViewModal(interaction: ModalSubmitInteraction): Promise<void> {
+    const parsed = parseTodoIssueModalId(interaction.customId, TODO_EDIT_VIEW_MODAL_PREFIX);
+    if (!parsed) {
+      await safeReply(interaction, {
+        content: "This edit prompt expired.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const ok = await requireOwner(interaction);
+    if (!ok) return;
+
+    await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+
+    const rawTitle = interaction.fields.getTextInputValue(TODO_CREATE_TITLE_ID);
+    const rawBody = interaction.fields.getTextInputValue(TODO_CREATE_BODY_ID);
+    const selectedTypes = parseTodoCreateTypeLabels(
+      interaction.fields.getStringSelectValues(TODO_CREATE_TYPE_ID),
+    );
+    const trimmedTitle = sanitizeTodoRichText(rawTitle).trim();
+    if (!trimmedTitle) {
+      await safeReply(interaction, {
+        content: "Title cannot be empty.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const trimmedBody = sanitizeTodoRichText(rawBody);
+    if (!trimmedBody.trim()) {
+      await safeReply(interaction, {
+        content: "Description cannot be empty.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (selectedTypes.length === 0) {
+      await safeReply(interaction, {
+        content: "Select at least one issue type.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    try {
+      await updateIssue(parsed.issueNumber, {
+        title: trimmedTitle,
+        body: trimmedBody.slice(0, MAX_ISSUE_BODY),
+      });
+      await setIssueLabels(parsed.issueNumber, selectedTypes);
+    } catch (err: any) {
+      await safeReply(interaction, {
+        content: getGithubErrorMessage(err),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    let issue: IGithubIssue | null;
+    let comments: IGithubIssueComment[] = [];
+    try {
+      issue = await getIssue(parsed.issueNumber);
+      if (issue) {
+        comments = await listIssueComments(parsed.issueNumber);
+      }
+    } catch {
+      issue = null;
+    }
+
+    if (!issue) {
+      try {
+        await interaction.deleteReply();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    const basePayload = parseTodoPayloadToken(parsed.payloadToken);
+    if (!basePayload) {
+      try {
+        await interaction.deleteReply();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    const payload: TodoListPayload = { ...basePayload, page: parsed.page };
+
+    const viewPayload = buildIssueViewComponents(
+      issue,
+      comments,
+      payload,
+      parsed.payloadToken,
+    );
+
+    const channel = interaction.client.channels.cache.get(parsed.channelId);
+    if (channel && "messages" in channel) {
+      try {
+        const message = await (channel as any).messages.fetch(parsed.messageId);
+        await message.edit({
+          components: viewPayload.components,
+        });
+      } catch {
+        // ignore refresh failures
+      }
+    }
+
+    try {
+      await interaction.deleteReply();
+    } catch {
+      // ignore
+    }
+  }
+
   @ModalComponent({ id: /^todo-edit-title-modal:[^:]+:\d+:\d+:\d+:\d+$/ })
   async submitEditTitleModal(interaction: ModalSubmitInteraction): Promise<void> {
     const parsed = parseTodoIssueModalId(interaction.customId, TODO_EDIT_TITLE_MODAL_PREFIX);
@@ -2527,6 +2653,89 @@ export class TodoCommand {
     }
 
     modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(queryInput));
+    await interaction.showModal(modal);
+  }
+
+  @ButtonComponent({ id: /^todo-edit-view-button:[^:]+:\d+:\d+$/ })
+  async editFromView(interaction: ButtonInteraction): Promise<void> {
+    const parsed = parseTodoIssueActionId(interaction.customId, TODO_EDIT_VIEW_BUTTON_PREFIX);
+    if (!parsed) {
+      await replyTodoExpired(interaction);
+      return;
+    }
+
+    const ok = await requireOwner(interaction);
+    if (!ok) return;
+
+    let issue: IGithubIssue | null;
+    try {
+      issue = await getIssue(parsed.issueNumber);
+    } catch {
+      issue = null;
+    }
+
+    if (!issue) {
+      await safeReply(interaction, {
+        content: `Issue #${parsed.issueNumber} was not found.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(
+        buildTodoEditViewModalId(
+          parsed.payloadToken,
+          parsed.page,
+          parsed.issueNumber,
+          interaction.channelId,
+          interaction.message?.id ?? "",
+        ),
+      )
+      .setTitle("Edit GitHub Issue");
+
+    const titleInput = new TextInputBuilder()
+      .setCustomId(TODO_CREATE_TITLE_ID)
+      .setLabel("Title")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(256)
+      .setValue(issue.title);
+
+    const bodyInput = new TextInputBuilder()
+      .setCustomId(TODO_CREATE_BODY_ID)
+      .setLabel("Description")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setMaxLength(MAX_ISSUE_BODY);
+
+    if (issue.body) {
+      bodyInput.setValue(issue.body.slice(0, MAX_ISSUE_BODY));
+    }
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput),
+    );
+    modal.addLabelComponents((label) =>
+      label
+        .setLabel("Issue Type(s)")
+        .setDescription("Select one or more issue types")
+        .setStringSelectMenuComponent((builder) =>
+          builder
+            .setCustomId(TODO_CREATE_TYPE_ID)
+            .setPlaceholder("Select type(s)")
+            .setMinValues(1)
+            .setMaxValues(TODO_CREATE_TYPE_LABELS.length)
+            .addOptions(
+              TODO_CREATE_TYPE_LABELS.map((typeLabel) => ({
+                label: typeLabel,
+                value: typeLabel,
+                default: issue.labels.includes(typeLabel),
+              })),
+            )),
+    );
+
     await interaction.showModal(modal);
   }
 
