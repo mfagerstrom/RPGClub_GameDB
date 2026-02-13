@@ -1,3 +1,16 @@
+# Commit snapshot (2026-02-13)
+
+8cedc5e 2026-02-09 emoji improvements
+2590f49 2026-02-09 fix: import improvements
+a4ae0e7 2026-02-06 Failed experiment with xbox game library importing
+ff15e83 2026-02-06 fix: improvements to help text for imports
+603ece7 2026-02-06 issue-176: implemented game completion import from csv file
+306c641 2026-02-06 issue-182: improve completionator game completion import, enable more auto-matching
+38b4c1b 2026-02-06 fix: adjusted variables for IGDB scanning timing
+6e45fa8 2026-02-06 issue-183: implemented IGDB scan service to update descriptions and release data
+5b0664f 2026-02-06 issue-181: implemented log batching for [INFO] messages
+5d4433e 2026-02-06 issue-179: move new game release announcments to a new channel
+
 # Commit snapshot (2026-02-08)
 
 a4ae0e7 2026-02-06 Failed experiment with xbox game library importing
