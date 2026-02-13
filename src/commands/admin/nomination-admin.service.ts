@@ -38,7 +38,7 @@ export async function handleDeleteGotmNomination(
 
     await deleteNominationForUser("gotm", targetRound, user.id);
     const nominations = await listNominationsForRound("gotm", targetRound);
-    const embed = buildNominationDeleteViewEmbed("GOTM", "/gotm nominate", targetRound, window, nominations);
+    const embed = buildNominationDeleteViewEmbed("GOTM", "/nominate", targetRound, window, nominations);
     const adminName = interaction.user.tag ?? interaction.user.username ?? interaction.user.id;
     const content = `${adminName} deleted <@${user.id}>'s nomination "${nomination.gameTitle}" for GOTM Round ${targetRound}. Reason: ${reason}`;
 
@@ -78,7 +78,7 @@ export async function handleDeleteNrGotmNomination(
 
     await deleteNominationForUser("nr-gotm", targetRound, user.id);
     const nominations = await listNominationsForRound("nr-gotm", targetRound);
-    const embed = buildNominationDeleteViewEmbed("NR-GOTM", "/nr-gotm nominate", targetRound, window, nominations);
+    const embed = buildNominationDeleteViewEmbed("NR-GOTM", "/nominate", targetRound, window, nominations);
     const adminName = interaction.user.tag ?? interaction.user.username ?? interaction.user.id;
     const content = `${adminName} deleted <@${user.id}>'s nomination "${nomination.gameTitle}" for NR-GOTM Round ${targetRound}. Reason: ${reason}`;
 
@@ -96,7 +96,7 @@ export async function handleDeleteNrGotmNomination(
 
 export async function handleDeleteGotmNomsPanel(interaction: CommandInteraction): Promise<void> {
   const window = await getUpcomingNominationWindow();
-  const view = await buildNominationDeleteView("gotm", "/gotm nominate", "admin");
+  const view = await buildNominationDeleteView("gotm", "/nominate", "admin");
   if (!view) {
     await safeReply(interaction, {
       content: `No GOTM nominations found for Round ${window.targetRound}.`,
@@ -115,7 +115,7 @@ export async function handleDeleteGotmNomsPanel(interaction: CommandInteraction)
 
 export async function handleDeleteNrGotmNomsPanel(interaction: CommandInteraction): Promise<void> {
   const window = await getUpcomingNominationWindow();
-  const view = await buildNominationDeleteView("nr-gotm", "/nr-gotm nominate", "admin");
+  const view = await buildNominationDeleteView("nr-gotm", "/nominate", "admin");
   if (!view) {
     await safeReply(interaction, {
       content: `No NR-GOTM nominations found for Round ${window.targetRound}.`,

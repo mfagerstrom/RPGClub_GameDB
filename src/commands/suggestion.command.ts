@@ -5,10 +5,7 @@ import {
   ButtonStyle,
   ContainerBuilder,
   MessageFlags,
-  ModalBuilder,
   ModalSubmitInteraction,
-  TextInputBuilder,
-  TextInputStyle,
   TextDisplayBuilder,
 } from "discord.js";
 import {
@@ -52,7 +49,7 @@ const SUGGESTION_CREATE_MODAL_ID = "suggestion-create-modal";
 const SUGGESTION_CREATE_TITLE_ID = "suggestion-create-title";
 const SUGGESTION_CREATE_DETAILS_ID = "suggestion-create-details";
 const SUGGESTION_CREATE_TYPE_ID = "suggestion-create-type";
-const SUGGESTION_LABELS = ["New Feature", "Improvement", "Bug", "Blocked"] as const;
+const SUGGESTION_LABELS = ["New Feature", "Improvement", "Bug"] as const;
 type SuggestionLabel = (typeof SUGGESTION_LABELS)[number];
 const SUGGESTION_REVIEW_PREFIX = "suggestion-review";
 const SUGGESTION_REVIEW_DECISION_MODAL_PREFIX = "suggestion-review-decision";
@@ -273,8 +270,6 @@ function buildSuggestionReviewSummaryText(
   const details = suggestion.details ?? "No details provided.";
 
   return [
-    "Suggestion Review",
-    "-----------------",
     `Suggestion: #${suggestion.suggestionId} - ${suggestion.title}`,
     `Labels: ${labels}`,
     `Submitted by: ${authorLabel}`,
@@ -426,48 +421,99 @@ function parseSuggestionApproveId(id: string): number | null {
   return Number.isInteger(suggestionId) && suggestionId > 0 ? suggestionId : null;
 }
 
-function buildSuggestionCreateModal(): ModalBuilder {
-  const titleInput = new TextInputBuilder()
-    .setCustomId(SUGGESTION_CREATE_TITLE_ID)
-    .setLabel("Title")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setMaxLength(256);
+function buildSuggestionCreateModalComponents(): APIModalInteractionResponseCallbackComponent[] {
+  return [
+    {
+      type: ApiComponentType.ActionRow,
+      components: [
+        {
+          type: ApiComponentType.TextInput,
+          custom_id: SUGGESTION_CREATE_TITLE_ID,
+          label: "Title",
+          style: ApiTextInputStyle.Short,
+          required: true,
+          max_length: 256,
+        },
+      ],
+    },
+    {
+      type: ApiComponentType.ActionRow,
+      components: [
+        {
+          type: ApiComponentType.TextInput,
+          custom_id: SUGGESTION_CREATE_DETAILS_ID,
+          label: "Description",
+          style: ApiTextInputStyle.Paragraph,
+          required: true,
+          max_length: 4000,
+        },
+      ],
+    },
+    {
+      type: ApiComponentType.Label,
+      label: "Suggestion Type(s)",
+      description: "Select one or more suggestion types",
+      component: {
+        type: ApiComponentType.CheckboxGroup,
+        custom_id: SUGGESTION_CREATE_TYPE_ID,
+        min_values: 1,
+        max_values: SUGGESTION_LABELS.length,
+        options: SUGGESTION_LABELS.map((typeLabel) => ({
+          label: typeLabel,
+          value: typeLabel,
+        })),
+      },
+    },
+  ];
+}
 
-  const detailsInput = new TextInputBuilder()
-    .setCustomId(SUGGESTION_CREATE_DETAILS_ID)
-    .setLabel("Description")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMaxLength(4000);
+async function openSuggestionCreateModal(interaction: CommandInteraction): Promise<void> {
+  const modalApi = new RawModalApiService({
+    applicationId: interaction.applicationId,
+  });
+  await modalApi.openModal({
+    interactionId: interaction.id,
+    interactionToken: interaction.token,
+    feature: "suggestion",
+    flow: "review-decision",
+    sessionId: `suggestion-create-${interaction.user.id}`,
+    customId: SUGGESTION_CREATE_MODAL_ID,
+    title: "Submit Suggestion",
+    components: buildSuggestionCreateModalComponents(),
+  });
+}
 
-  const modal = new ModalBuilder()
-    .setCustomId(SUGGESTION_CREATE_MODAL_ID)
-    .setTitle("Submit Suggestion")
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(detailsInput),
-    );
+function extractSuggestionCreateTypeValuesFromInteraction(
+  interaction: ModalSubmitInteraction,
+): string[] {
+  const components = (interaction.components ?? []) as Array<{
+    type?: number;
+    components?: Array<{ customId?: string; values?: unknown; value?: unknown }>;
+    component?: { customId?: string; values?: unknown; value?: unknown };
+  }>;
 
-  modal.addLabelComponents((label) =>
-    label
-      .setLabel("Suggestion Type(s)")
-      .setDescription("Select one or more suggestion types")
-      .setStringSelectMenuComponent((builder) =>
-        builder
-          .setCustomId(SUGGESTION_CREATE_TYPE_ID)
-          .setPlaceholder("Select type(s)")
-          .setMinValues(1)
-          .setMaxValues(SUGGESTION_LABELS.length)
-          .addOptions(
-            SUGGESTION_LABELS.map((typeLabel) => ({
-              label: typeLabel,
-              value: typeLabel,
-            })),
-          )),
-  );
-
-  return modal;
+  const values: string[] = [];
+  for (const topLevel of components) {
+    if (!topLevel || typeof topLevel !== "object") continue;
+    const children = Array.isArray(topLevel.components)
+      ? topLevel.components
+      : topLevel.component
+        ? [topLevel.component]
+        : [];
+    for (const child of children) {
+      if (!child || child.customId !== SUGGESTION_CREATE_TYPE_ID) continue;
+      if (Array.isArray(child.values)) {
+        child.values.forEach((entry) => {
+          if (typeof entry === "string") {
+            values.push(entry);
+          }
+        });
+      } else if (typeof child.value === "string") {
+        values.push(child.value);
+      }
+    }
+  }
+  return values;
 }
 
 function parseSuggestionLabels(values: readonly string[]): SuggestionLabel[] {
@@ -481,7 +527,14 @@ function parseSuggestionLabels(values: readonly string[]): SuggestionLabel[] {
 export class SuggestionCommand {
   @Slash({ description: "Submit a bot suggestion", name: "suggestion" })
   async suggestion(interaction: CommandInteraction): Promise<void> {
-    await interaction.showModal(buildSuggestionCreateModal()).catch(async () => {
+    await openSuggestionCreateModal(interaction).catch(async (error: unknown) => {
+      logRawModal("error", "suggestion.create_modal.open_failed", {
+        feature: "suggestion",
+        flow: "review-decision",
+        userId: interaction.user.id,
+        customId: SUGGESTION_CREATE_MODAL_ID,
+        error: formatErrorForLog(error),
+      });
       await safeReply(interaction, {
         content: "Unable to open the suggestion form.",
         flags: MessageFlags.Ephemeral,
@@ -496,7 +549,7 @@ export class SuggestionCommand {
     const rawTitle = interaction.fields.getTextInputValue(SUGGESTION_CREATE_TITLE_ID);
     const rawDetails = interaction.fields.getTextInputValue(SUGGESTION_CREATE_DETAILS_ID);
     const selectedLabels = parseSuggestionLabels(
-      interaction.fields.getStringSelectValues(SUGGESTION_CREATE_TYPE_ID),
+      extractSuggestionCreateTypeValuesFromInteraction(interaction),
     );
     const trimmedTitle = sanitizeUserInput(rawTitle, { preserveNewlines: false });
     if (!trimmedTitle) {

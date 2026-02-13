@@ -93,6 +93,7 @@ import { NOW_PLAYING_SIDEGAME_TAG_ID } from "../config/tags.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 import { STANDARD_PLATFORM_IDS } from "../config/standardPlatforms.js";
 import { padCommandName } from "./help.command.js";
+import { openNominationModal } from "./nominate.command.js";
 import {
   countGameDbCsvImportItems,
   createGameDbCsvImportSession,
@@ -2476,41 +2477,39 @@ export class GameDb {
     isReleased: boolean,
     disableVideo = false,
   ): ActionRowBuilder<ButtonBuilder>[] {
+    const nominateGame = new ButtonBuilder()
+      .setCustomId(`gamedb-action:nominate:${gameId}`)
+      .setLabel("Nominate")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(false);
     const addNowPlaying = new ButtonBuilder()
       .setCustomId(`gamedb-action:nowplaying:${gameId}`)
       .setLabel("Add to Now Playing List")
       .setStyle(ButtonStyle.Primary);
-    const addCollection = new ButtonBuilder()
-      .setCustomId(`gamedb-action:collection:${gameId}`)
-      .setLabel("Add to Collection")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(true);
     const viewFeaturedVideo = new ButtonBuilder()
       .setCustomId(`gamedb-action:video:${gameId}`)
       .setLabel("View Featured Video")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disableVideo);
     const rows: ActionRowBuilder<ButtonBuilder>[] = [];
-    const primaryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      addNowPlaying,
-      addCollection,
-    );
+    const primaryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(nominateGame);
+    primaryRow.addComponents(addNowPlaying);
     if (isReleased) {
       const addCompletion = new ButtonBuilder()
         .setCustomId(`gamedb-action:completion:${gameId}`)
         .setLabel("Add Completion")
-        .setStyle(ButtonStyle.Success);
+        .setStyle(ButtonStyle.Primary);
       primaryRow.addComponents(addCompletion);
-    }
-    if (featuredVideoUrl) {
-      primaryRow.addComponents(viewFeaturedVideo);
     }
     if (!hasThread) {
       const addThread = new ButtonBuilder()
         .setCustomId(`gamedb-action:thread:${gameId}`)
-        .setLabel("Add Now Playing Thread")
-        .setStyle(ButtonStyle.Secondary);
+        .setLabel("Create Now Playing Thread")
+        .setStyle(ButtonStyle.Primary);
       primaryRow.addComponents(addThread);
+    }
+    if (featuredVideoUrl) {
+      primaryRow.addComponents(viewFeaturedVideo);
     }
     rows.push(primaryRow);
     if (canMarkThumbnailBad && !isThumbnailBad && !isThumbnailApproved) {
@@ -2580,7 +2579,7 @@ export class GameDb {
     }).catch(() => {});
   }
 
-  @ButtonComponent({ id: /^gamedb-action:(nowplaying|collection|completion|thread|video|hltb-import|bad-thumb|good-thumb):\d+$/ })
+  @ButtonComponent({ id: /^gamedb-action:(nowplaying|nominate|completion|thread|video|hltb-import|bad-thumb|good-thumb):\d+$/ })
   async handleGameDbAction(interaction: ButtonInteraction): Promise<void> {
     const [, action, gameIdRaw] = interaction.customId.split(":");
     const gameId = Number(gameIdRaw);
@@ -2751,12 +2750,16 @@ export class GameDb {
       return;
     }
 
-    if (action === "collection") {
-      await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
-      await interaction.editReply(
-        "Add to Collection from /gamedb is temporarily disabled while we improve the flow. " +
-        "Use `/collection add` for now.",
-      ).catch(() => {});
+    if (action === "nominate") {
+      await openNominationModal(interaction, {
+        prefilledTitle: game.title,
+      }).catch(async (error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await safeReply(interaction, {
+          content: `Unable to open nomination form: ${errorMessage}`,
+          flags: MessageFlags.Ephemeral,
+        });
+      });
       return;
     }
 

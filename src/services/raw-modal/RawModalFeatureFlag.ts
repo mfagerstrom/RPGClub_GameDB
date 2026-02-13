@@ -23,7 +23,7 @@ export function isRawImprovedModalsEnabled(): boolean {
 }
 
 export function isRawModalPilotFeature(feature: RawModalFeature): boolean {
-  return RAW_MODAL_PILOT_FEATURES.includes(feature);
+  return (RAW_MODAL_PILOT_FEATURES as readonly RawModalFeature[]).includes(feature);
 }
 
 export function isRawModalPilotEnabledForGuild(guildId?: string | null): boolean {

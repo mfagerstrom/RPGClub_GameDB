@@ -250,6 +250,31 @@ export async function safeDeferReply(
   }
 }
 
+// Safely defer a component update, ignoring acknowledgement races.
+export async function safeDeferUpdate(interaction: AnyRepliable): Promise<void> {
+  const anyInteraction = interaction as any;
+  if (shouldBlockDevChannelInteraction(interaction)) {
+    await sendDevChannelBlockResponse(interaction);
+    return;
+  }
+
+  if (anyInteraction.__rpgAcked || anyInteraction.deferred || anyInteraction.replied) {
+    return;
+  }
+
+  if (typeof anyInteraction.deferUpdate !== "function") {
+    return;
+  }
+
+  try {
+    await anyInteraction.deferUpdate();
+    anyInteraction.__rpgAcked = true;
+    anyInteraction.__rpgDeferred = true;
+  } catch {
+    // ignore acknowledgement races
+  }
+}
+
 // Ensure we do not hit "Interaction already acknowledged" when replying
 const isAckError = (err: any): boolean => {
   const code = err?.code ?? err?.rawError?.code;

@@ -72,6 +72,14 @@ function validateModalField(field: ModalData): IRawModalSubmitValidationResult {
     return customIdCheck;
   }
 
+  if ((field as { type: number }).type === ComponentType.RadioGroup) {
+    const value = (field as { value?: unknown }).value;
+    if (!(value === null || typeof value === "string")) {
+      return { ok: false, reason: "radio group value must be a string or null" };
+    }
+    return { ok: true };
+  }
+
   switch (field.type) {
     case ComponentType.TextInput: {
       const value = (field as { value?: unknown }).value;

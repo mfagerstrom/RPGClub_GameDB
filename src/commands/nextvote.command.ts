@@ -45,8 +45,7 @@ export class NextVoteCommand {
       const descriptionLines: string[] = [];
       descriptionLines.push(dateText);
       descriptionLines.push("");
-      descriptionLines.push("See current nominations: /gotm noms or /nr-gotm noms");
-      descriptionLines.push("Nominate a game: /gotm nominate or /nr-gotm nominate");
+      descriptionLines.push("Nominate a game: /nominate");
 
       const embed = new EmbedBuilder()
         .setColor(0x0099ff)

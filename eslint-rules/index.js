@@ -1280,7 +1280,7 @@ export default {
       },
       create(context) {
         const EDIT_METHODS = new Set(["editReply", "update", "safeUpdate"]);
-        const CREATE_METHODS = new Set(["reply"]);
+        const CREATE_METHODS = new Set(["reply", "safeReply", "send"]);
 
         const isComponentsV2Flag = (node) => {
           if (!node) return false;
@@ -1362,7 +1362,13 @@ export default {
             }
             if (callee.type === "MemberExpression") {
               const methodName = getCalleePropertyName(callee);
-              if (!methodName || !INTERACTION_RESPONSE_METHODS.has(methodName)) return;
+              const isInteractionMethod = Boolean(
+                methodName && INTERACTION_RESPONSE_METHODS.has(methodName),
+              );
+              const isMessageSendMethod = Boolean(
+                methodName && MESSAGE_SEND_METHODS.has(methodName),
+              );
+              if (!methodName || (!isInteractionMethod && !isMessageSendMethod)) return;
               if (!EDIT_METHODS.has(methodName) && !CREATE_METHODS.has(methodName)) return;
               const arg = node.arguments[0];
               checkObject(arg, methodName);

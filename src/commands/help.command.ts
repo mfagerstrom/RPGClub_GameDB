@@ -20,14 +20,12 @@ import { buildSuperAdminHelpResponse, isSuperAdmin } from "./superadmin.command.
 import { safeDeferReply, safeReply, safeUpdate } from "../functions/InteractionUtils.js";
 
 type HelpTopicId =
-  | "gotm"
-  | "nr-gotm"
+  | "nominate"
   | "round"
+  | "round-history"
   | "nextvote"
   | "hltb"
-  | "activity-emoji"
   | "now-playing"
-  | "remindme"
   | "rss"
   | "mp-info"
   | "profile"
@@ -47,9 +45,6 @@ type HelpTopicId =
 type HelpMenuView =
   | "main"
   | "category"
-  | "gotm"
-  | "nr-gotm"
-  | "remindme"
   | "profile"
   | "now-playing"
   | "game-completion"
@@ -68,36 +63,6 @@ type HelpTopic = {
   summary: string;
   syntax: string;
   parameters?: string;
-  notes?: string;
-};
-
-type GotmHelpTopicId = "search" | "noms" | "nominate" | "delete-nomination";
-
-type GotmHelpTopic = {
-  id: GotmHelpTopicId;
-  label: string;
-  summary: string;
-  syntax: string;
-  notes?: string;
-};
-
-type NrGotmHelpTopicId = "search" | "noms" | "nominate" | "delete-nomination";
-
-type NrGotmHelpTopic = {
-  id: NrGotmHelpTopicId;
-  label: string;
-  summary: string;
-  syntax: string;
-  notes?: string;
-};
-
-type RemindMeHelpTopicId = "create" | "menu" | "snooze" | "delete";
-
-type RemindMeHelpTopic = {
-  id: RemindMeHelpTopicId;
-  label: string;
-  summary: string;
-  syntax: string;
   notes?: string;
 };
 
@@ -150,24 +115,13 @@ type GameDbHelpTopic = {
 
 const HELP_TOPICS: HelpTopic[] = [
   {
-    id: "gotm",
-    label: "/gotm",
+    id: "nominate",
+    label: "/nominate",
     summary:
-      "Browse GOTM history, see current nominations, and add or change your nomination.",
-    syntax:
-      "Syntax: /gotm search [round:<int>] [year:<int>] [month:<string>] [title:<string>] [showinchat:<bool>] | /gotm noms [alt_layout:<bool>] | /gotm nominate title:<string> | /gotm delete-nomination",
+      "Open a nomination modal for GOTM or NR-GOTM with your current upcoming-round nominations.",
+    syntax: "Syntax: /nominate",
     notes:
-      "Search by round, month/year, or title. Set showinchat:true to share in channel; otherwise replies are private. Nominations are for the next round and close a day before voting.",
-  },
-  {
-    id: "nr-gotm",
-    label: "/nr-gotm",
-    summary:
-      "Browse NR-GOTM history, see current nominations, and add or change your nomination.",
-    syntax:
-      "Syntax: /nr-gotm search [round:<int>] [year:<int>] [month:<string>] [title:<string>] [showinchat:<bool>] | /nr-gotm noms [alt_layout:<bool>] | /nr-gotm nominate title:<string> | /nr-gotm delete-nomination",
-    notes:
-      "Search by round, month/year, or title. Set showinchat:true to share in channel; otherwise replies are private. Nominations are for the next round and close a day before voting.",
+      "The modal includes your current GOTM and NR-GOTM picks for the next round, plus required reason input.",
   },
   {
     id: "round",
@@ -177,11 +131,22 @@ const HELP_TOPICS: HelpTopic[] = [
     notes: "Replies privately by default; set showinchat:true to post in channel.",
   },
   {
+    id: "round-history",
+    label: "/round-history",
+    summary: "Open a modal to filter and browse historical GOTM/NR-GOTM rounds.",
+    syntax: "Syntax: /round-history [showinchat:<boolean>]",
+    notes:
+      "Modal filters: category (GOTM/NR-GOTM/Both), optional title query, year, and sort order. " +
+      "Results are paginated at 5 rounds per page.",
+  },
+  {
     id: "nextvote",
     label: "/nextvote",
     summary: "Check when the next GOTM/NR-GOTM vote happens.",
     syntax: "Syntax: /nextvote [showinchat:<boolean>]",
-    notes: "Replies privately by default; set showinchat:true to post in channel. See nominations with /gotm noms or /nr-gotm noms; nominate with /gotm nominate or /nr-gotm nominate.",
+    notes:
+      "Replies privately by default; set showinchat:true to post in channel. " +
+      "Nominate with /nominate.",
   },
   {
     id: "hltb",
@@ -190,17 +155,6 @@ const HELP_TOPICS: HelpTopic[] = [
     syntax: "Syntax: /hltb title:<string> [showinchat:<boolean>]",
     parameters: "title (required) — game name and optional details. showinchat (optional) — set true to share in channel.",
     notes: "Title autocompletes from GameDB and includes the release year.",
-  },
-  {
-    id: "activity-emoji",
-    label: "/activity-emoji",
-    summary: "Generate a server-ready emoji asset from Rich Presence activity icons.",
-    syntax:
-      "Syntax: /activity-emoji [member:<user>] [activity:<exact name>] " +
-      "[icon:<auto|large|small>] [size:<128|256>] [days:<7|30|60>] [showinchat:<boolean>]",
-    notes:
-      "Uses recorded activity-feed icon snapshots across guild history (or one member if provided). " +
-      "Output is deterministic and includes duplicate detection based on source reference and byte hash.",
   },
   {
     id: "mp-info",
@@ -256,12 +210,6 @@ const HELP_TOPICS: HelpTopic[] = [
       "CSV import uses the same review flow and provides a template with required columns and an example row.",
   },
   {
-    id: "remindme",
-    label: "/remindme",
-    summary: "Set personal reminders with snooze buttons (delivered by DM).",
-    syntax: "Use /remindme help for a list of reminder subcommands, syntax, and notes.",
-  },
-  {
     id: "profile",
     label: "/profile",
     summary:
@@ -280,7 +228,8 @@ const HELP_TOPICS: HelpTopic[] = [
     notes:
       "Imports pull titles/covers from IGDB. View shows GOTM/NR-GOTM wins, " +
       "nominations, and related threads for the GameDB id. Game view also includes " +
-      "a quick Add to Collection button. Audit is admin only.",
+      "a quick Nominate button that opens the /nominate modal prefilled with that title. " +
+      "Audit is admin only.",
   },
   {
     id: "avatar-history",
@@ -368,7 +317,7 @@ const HELP_CATEGORIES: { id: string; name: string; topicIds: HelpTopicId[] }[] =
   {
     id: "monthly-games",
     name: "Monthly Games",
-    topicIds: ["gotm", "nr-gotm", "round", "nextvote"],
+    topicIds: ["nominate", "round", "round-history", "nextvote"],
   },
   {
     id: "members",
@@ -385,8 +334,6 @@ const HELP_CATEGORIES: { id: string; name: string; topicIds: HelpTopicId[] }[] =
     name: "Utilities",
     topicIds: [
       "hltb",
-      "activity-emoji",
-      "remindme",
       "suggestion",
       "giveaway",
       "avatar-history",
@@ -405,9 +352,6 @@ function isHelpView(view: string): view is HelpMenuView {
   return (
     view === "main" ||
     view === "category" ||
-    view === "gotm" ||
-    view === "nr-gotm" ||
-    view === "remindme" ||
     view === "profile" ||
     view === "now-playing" ||
     view === "game-completion" ||
@@ -487,101 +431,6 @@ function buildHelpDetailsEmbed(topic: HelpTopic): EmbedBuilder {
   if (topic.parameters) {
     embed.addFields({ name: "Parameters", value: topic.parameters });
   }
-
-  if (topic.notes) {
-    embed.addFields({ name: "Notes", value: topic.notes });
-  }
-
-  return embed;
-}
-
-const GOTM_HELP_TOPICS: GotmHelpTopic[] = [
-  {
-    id: "search",
-    label: "/gotm search",
-    summary: "Search GOTM history by round, year/month, title, or default to current round.",
-    syntax:
-      "Syntax: /gotm search [round:<int>] [year:<int>] [month:<string>] [title:<string>] [showinchat:<bool>]",
-    notes: "Ephemeral by default; set showinchat:true to post publicly.",
-  },
-  {
-    id: "noms",
-    label: "/gotm noms",
-    summary: "Public list of current GOTM nominations for the upcoming round.",
-    syntax: "Syntax: /gotm noms [alt_layout:<bool>]",
-  },
-  {
-    id: "nominate",
-    label: "/gotm nominate",
-    summary: "Submit or update your GOTM nomination for the upcoming round.",
-    syntax: "Syntax: /gotm nominate title:<string>",
-    notes:
-      "Ephemeral feedback; changes are announced publicly with the refreshed list. " +
-      "Game must exist in GameDB; if not, you'll be prompted to import from IGDB first.",
-  },
-  {
-    id: "delete-nomination",
-    label: "/gotm delete-nomination",
-    summary: "Delete your own GOTM nomination for the upcoming round.",
-    syntax: "Syntax: /gotm delete-nomination",
-    notes: "Ephemeral feedback; removal is announced publicly with the refreshed list.",
-  },
-];
-
-function buildGotmHelpButtons(activeId?: GotmHelpTopicId): ActionRowBuilder<StringSelectMenuBuilder>[] {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(buildHelpCustomId("gotm", { activeTopicId: activeId }))
-    .setPlaceholder("/gotm help")
-    .addOptions(
-      GOTM_HELP_TOPICS.map((topic) => ({
-        label: topic.label,
-        value: topic.id,
-        description: topic.summary.slice(0, 95),
-        default: topic.id === activeId,
-      })),
-    )
-    .addOptions({ label: "Back to Help Main Menu", value: "help-main" });
-
-  return [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)];
-}
-
-function buildGotmHelpEmbed(topic: GotmHelpTopic): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setTitle(`${topic.label} help`)
-    .setDescription(topic.summary)
-    .addFields({ name: "Syntax", value: topic.syntax });
-
-  if (topic.notes) {
-    embed.addFields({ name: "Notes", value: topic.notes });
-  }
-
-  return embed;
-}
-
-function buildRemindMeHelpButtons(
-  activeId?: RemindMeHelpTopicId,
-): ActionRowBuilder<StringSelectMenuBuilder>[] {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(buildHelpCustomId("remindme", { activeTopicId: activeId }))
-    .setPlaceholder("/remindme help")
-    .addOptions(
-      REMINDME_HELP_TOPICS.map((topic) => ({
-        label: topic.label,
-        value: topic.id,
-        description: topic.summary.slice(0, 95),
-        default: topic.id === activeId,
-      })),
-    )
-    .addOptions({ label: "Back to Help Main Menu", value: "help-main" });
-
-  return [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)];
-}
-
-function buildRemindMeHelpEmbed(topic: RemindMeHelpTopic): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setTitle(`${topic.label} help`)
-    .setDescription(topic.summary)
-    .addFields({ name: "Syntax", value: topic.syntax });
 
   if (topic.notes) {
     embed.addFields({ name: "Notes", value: topic.notes });
@@ -697,71 +546,6 @@ function buildGamedbHelpEmbed(topic: GameDbHelpTopic): EmbedBuilder {
   return embed;
 }
 
-const NR_GOTM_HELP_TOPICS: NrGotmHelpTopic[] = [
-  {
-    id: "search",
-    label: "/nr-gotm search",
-    summary: "Search NR-GOTM history by round, year/month, title, or default to current round.",
-    syntax:
-      "Syntax: /nr-gotm search [round:<int>] [year:<int>] [month:<string>] [title:<string>] [showinchat:<bool>]",
-    notes: "Ephemeral by default; set showinchat:true to post publicly.",
-  },
-  {
-    id: "noms",
-    label: "/nr-gotm noms",
-    summary: "Public list of current NR-GOTM nominations for the upcoming round.",
-    syntax: "Syntax: /nr-gotm noms [alt_layout:<bool>]",
-  },
-  {
-    id: "nominate",
-    label: "/nr-gotm nominate",
-    summary: "Submit or update your NR-GOTM nomination for the upcoming round.",
-    syntax: "Syntax: /nr-gotm nominate title:<string>",
-    notes:
-      "Ephemeral feedback; changes are announced publicly with the refreshed list. " +
-      "Game must exist in GameDB; if not, you'll be prompted to import from IGDB first.",
-  },
-  {
-    id: "delete-nomination",
-    label: "/nr-gotm delete-nomination",
-    summary: "Delete your own NR-GOTM nomination for the upcoming round.",
-    syntax: "Syntax: /nr-gotm delete-nomination",
-    notes: "Ephemeral feedback; removal is announced publicly with the refreshed list.",
-  },
-];
-
-function buildNrGotmHelpButtons(
-  activeId?: NrGotmHelpTopicId,
-): ActionRowBuilder<StringSelectMenuBuilder>[] {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(buildHelpCustomId("nr-gotm", { activeTopicId: activeId }))
-    .setPlaceholder("/nr-gotm help")
-    .addOptions(
-      NR_GOTM_HELP_TOPICS.map((topic) => ({
-        label: topic.label,
-        value: topic.id,
-        description: topic.summary.slice(0, 95),
-        default: topic.id === activeId,
-      })),
-    )
-    .addOptions({ label: "Back to Help Main Menu", value: "help-main" });
-
-  return [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)];
-}
-
-function buildNrGotmHelpEmbed(topic: NrGotmHelpTopic): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setTitle(`${topic.label} help`)
-    .setDescription(topic.summary)
-    .addFields({ name: "Syntax", value: topic.syntax });
-
-  if (topic.notes) {
-    embed.addFields({ name: "Notes", value: topic.notes });
-  }
-
-  return embed;
-}
-
 type RssHelpTopicId = "add" | "remove" | "edit" | "list";
 
 type RssHelpTopic = {
@@ -797,35 +581,6 @@ const RSS_HELP_TOPICS: RssHelpTopic[] = [
     label: "/rss list",
     summary: "List configured RSS relays and their filters.",
     syntax: "Syntax: /rss list",
-  },
-];
-
-const REMINDME_HELP_TOPICS: RemindMeHelpTopic[] = [
-  {
-    id: "create",
-    label: "/remindme create",
-    summary: "Create a reminder delivered by DM with quick snooze buttons.",
-    syntax: "Syntax: /remindme create when:<date/time> [note:<text>]",
-    notes: "Use natural inputs like 'in 45m' or absolute datetimes; must be at least 1 minute ahead.",
-  },
-  {
-    id: "menu",
-    label: "/remindme menu",
-    summary: "Show your reminders and usage help.",
-    syntax: "Syntax: /remindme menu",
-    notes: "Lists your reminders with ids and snooze/delete options.",
-  },
-  {
-    id: "snooze",
-    label: "/remindme snooze",
-    summary: "Snooze a reminder to a new time.",
-    syntax: "Syntax: /remindme snooze id:<int> until:<date/time>",
-  },
-  {
-    id: "delete",
-    label: "/remindme delete",
-    summary: "Delete a reminder by id.",
-    syntax: "Syntax: /remindme delete id:<int>",
   },
 ];
 
@@ -1112,9 +867,9 @@ export function buildMainHelpResponse(): {
     .setDescription(
       "Use the category dropdowns below to jump straight to a command’s details.\n\n" +
         "**Monthly Games**\n" +
-        `${formatCommandLine("gotm", "GOTM history and nominations")}\n` +
-        `${formatCommandLine("nr-gotm", "NR-GOTM history and nominations")}\n` +
+        `${formatCommandLine("nominate", "Open the nomination modal for GOTM or NR-GOTM.")}\n` +
         `${formatCommandLine("round", "See the current round and winners.")}\n` +
+        `${formatCommandLine("round-history", "Browse historical rounds with filters.")}\n` +
         `${formatCommandLine("nextvote", "Check when the next vote happens.")}\n\n` +
         "**Members**\n" +
         `${formatCommandLine("profile", "View and edit member profiles.")}\n` +
@@ -1126,8 +881,6 @@ export function buildMainHelpResponse(): {
         `${formatCommandLine("game-completion", "Log and manage your completed games.")}\n\n` +
         "**Utilities**\n" +
         `${formatCommandLine("hltb", "Look up HowLongToBeat playtimes.")}\n` +
-        `${formatCommandLine("activity-emoji", "Generate emoji assets from activity icons.")}\n` +
-        `${formatCommandLine("remindme", "Set personal reminders with snooze.")}\n` +
         `${formatCommandLine("gamegiveaway", "Jump to the giveaway hub list.")}\n` +
         `${formatCommandLine("avatar-history", "View a member's avatar history.")}\n` +
         `${formatCommandLine("suggestion", "Submit a bot suggestion.")}\n\n` +
@@ -1145,39 +898,6 @@ export function buildMainHelpResponse(): {
     embeds: [embed],
     components: buildMainHelpComponents(),
   };
-}
-
-export function buildGotmHelpResponse(
-  activeTopicId?: GotmHelpTopicId,
-): { embeds: EmbedBuilder[]; components: ActionRowBuilder<StringSelectMenuBuilder>[] } {
-  const embed = new EmbedBuilder()
-    .setTitle("/gotm commands")
-    .setDescription("Choose a GOTM subcommand from the dropdown to view details.");
-
-  const components = buildGotmHelpButtons(activeTopicId);
-  return { embeds: [embed], components };
-}
-
-export function buildNrGotmHelpResponse(
-  activeTopicId?: NrGotmHelpTopicId,
-): { embeds: EmbedBuilder[]; components: ActionRowBuilder<StringSelectMenuBuilder>[] } {
-  const embed = new EmbedBuilder()
-    .setTitle("/nr-gotm commands")
-    .setDescription("Choose an NR-GOTM subcommand from the dropdown to view details.");
-
-  const components = buildNrGotmHelpButtons(activeTopicId);
-  return { embeds: [embed], components };
-}
-
-export function buildRemindMeHelpResponse(
-  activeTopicId?: RemindMeHelpTopicId,
-): { embeds: EmbedBuilder[]; components: ActionRowBuilder<StringSelectMenuBuilder>[] } {
-  const embed = new EmbedBuilder()
-    .setTitle("/remindme commands")
-    .setDescription("Choose a remindme subcommand from the dropdown to view details.");
-
-  const components = buildRemindMeHelpButtons(activeTopicId);
-  return { embeds: [embed], components };
 }
 
 export function buildProfileHelpResponse(
@@ -1288,74 +1008,6 @@ export class BotHelp {
     });
   }
 
-  @SelectMenuComponent({ id: /^(help:gotm:|gotm-help-select)/ })
-  async handleGotmHelpButton(interaction: StringSelectMenuInteraction): Promise<void> {
-    const parsed = parseHelpCustomId(interaction.customId);
-    if (!parsed || parsed.view !== "gotm") {
-      await sendHelpRefreshPrompt(interaction);
-      return;
-    }
-
-    const topicId =
-      (interaction.values?.[0] as GotmHelpTopicId | "help-main" | undefined) ??
-      (parsed.state.activeTopicId as GotmHelpTopicId | "help-main" | undefined);
-    if (topicId === "help-main") {
-      const response = buildMainHelpResponse();
-      await safeUpdate(interaction, response);
-      return;
-    }
-    const topic = GOTM_HELP_TOPICS.find((entry) => entry.id === topicId);
-
-    if (!topic) {
-      const response = buildGotmHelpResponse(parsed.state.activeTopicId as GotmHelpTopicId | undefined);
-      await safeUpdate(interaction, {
-        ...response,
-        content: "Sorry, I don't recognize that GOTM help topic. Showing the GOTM help menu.",
-      });
-      return;
-    }
-
-    const embed = buildGotmHelpEmbed(topic);
-    await safeUpdate(interaction, {
-      embeds: [embed],
-      components: buildGotmHelpButtons(topic.id),
-    });
-  }
-
-  @SelectMenuComponent({ id: /^(help:nr-gotm:|nr-gotm-help-select)/ })
-  async handleNrGotmHelpButton(interaction: StringSelectMenuInteraction): Promise<void> {
-    const parsed = parseHelpCustomId(interaction.customId);
-    if (!parsed || parsed.view !== "nr-gotm") {
-      await sendHelpRefreshPrompt(interaction);
-      return;
-    }
-
-    const topicId =
-      (interaction.values?.[0] as NrGotmHelpTopicId | "help-main" | undefined) ??
-      (parsed.state.activeTopicId as NrGotmHelpTopicId | "help-main" | undefined);
-    if (topicId === "help-main") {
-      const response = buildMainHelpResponse();
-      await safeUpdate(interaction, response);
-      return;
-    }
-    const topic = NR_GOTM_HELP_TOPICS.find((entry) => entry.id === topicId);
-
-    if (!topic) {
-      const response = buildNrGotmHelpResponse(parsed.state.activeTopicId as NrGotmHelpTopicId | undefined);
-      await safeUpdate(interaction, {
-        ...response,
-        content: "Sorry, I don't recognize that NR-GOTM help topic. Showing the NR-GOTM help menu.",
-      });
-      return;
-    }
-
-    const embed = buildNrGotmHelpEmbed(topic);
-    await safeUpdate(interaction, {
-      embeds: [embed],
-      components: buildNrGotmHelpButtons(topic.id),
-    });
-  }
-
   @SelectMenuComponent({ id: /^(help:rss:|rss-help-select)/ })
   async handleRssHelpButton(interaction: StringSelectMenuInteraction): Promise<void> {
     const parsed = parseHelpCustomId(interaction.customId);
@@ -1387,41 +1039,6 @@ export class BotHelp {
     await safeUpdate(interaction, {
       embeds: [embed],
       components: buildRssHelpButtons(topic.id),
-    });
-  }
-
-  @SelectMenuComponent({ id: /^(help:remindme:|remindme-help-select)/ })
-  async handleRemindMeHelpButton(interaction: StringSelectMenuInteraction): Promise<void> {
-    const parsed = parseHelpCustomId(interaction.customId);
-    if (!parsed || parsed.view !== "remindme") {
-      await sendHelpRefreshPrompt(interaction);
-      return;
-    }
-
-    const topicId =
-      (interaction.values?.[0] as RemindMeHelpTopicId | "help-main" | undefined) ??
-      (parsed.state.activeTopicId as RemindMeHelpTopicId | "help-main" | undefined);
-    if (topicId === "help-main") {
-      const response = buildMainHelpResponse();
-      await safeUpdate(interaction, response);
-      return;
-    }
-    const topic = REMINDME_HELP_TOPICS.find((entry) => entry.id === topicId);
-
-    if (!topic) {
-      const response = buildRemindMeHelpResponse(parsed.state.activeTopicId as RemindMeHelpTopicId | undefined);
-      await safeUpdate(interaction, {
-        ...response,
-        content:
-          "Sorry, I don't recognize that remindme help topic. Showing the remindme help menu.",
-      });
-      return;
-    }
-
-    const embed = buildRemindMeHelpEmbed(topic);
-    await safeUpdate(interaction, {
-      embeds: [embed],
-      components: buildRemindMeHelpButtons(topic.id),
     });
   }
 
@@ -1586,12 +1203,6 @@ function buildTopicHelpResponse(
   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
 } | null {
   switch (topicId) {
-    case "gotm":
-      return buildGotmHelpResponse();
-    case "nr-gotm":
-      return buildNrGotmHelpResponse();
-    case "remindme":
-      return buildRemindMeHelpResponse();
     case "profile":
       return buildProfileHelpResponse();
     case "game-completion":

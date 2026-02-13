@@ -54,11 +54,8 @@ export class CurrentRoundCommand {
       const cards = [...gotmCards, ...nrCards];
 
       const currentDescLines: string[] = [];
-      let mainLine = `Round ${roundNumber}`;
-
-      if (gotmMonthYear && nrGotmMonthYear && gotmMonthYear === nrGotmMonthYear) {
-        mainLine += ` - ${gotmMonthYear}`;
-      }
+      const mainLine = `Round ${roundNumber}`;
+      const roundTitle = `Round ${roundNumber} - ${gotmMonthYear}`;
 
       currentDescLines.push(mainLine);
 
@@ -79,8 +76,8 @@ export class CurrentRoundCommand {
       }
 
       const payloads = await buildGotmSearchMessages(interaction.client, cards, {
-        title: "Current Round",
-        continuationTitle: "Current Round (continued)",
+        title: roundTitle,
+        continuationTitle: `${roundTitle} (continued)`,
         emptyMessage: "No GOTM or NR-GOTM entries found for this round.",
         introText: currentDescLines.slice(1).join("\n"),
         guildId: interaction.guildId ?? undefined,

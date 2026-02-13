@@ -2,7 +2,6 @@ You may only edit files in the current working directory.
 You may only use non-destructive git commands.
 After every changeset you make (only when you stop working on a prompt), run `npm run compile` with a 60 second timeout.  If that fails, fix any issues.
 If `npm run compile` passes, run `npm run lint` and fix any issues returned from that.
-Every time a new session is started, update COMMIT-HISTORY.md using git history.
 Every time a new session is started, scan the entire project and ensure that all /help content is up to date.
 name sql files starting with today's date with datestamp (ie 20251210_sql_script_name) YYYYMMDD_name_format
 Research best practices for Discord.js and DiscordX, along with Typescript, so your coding mindset isn't out of date

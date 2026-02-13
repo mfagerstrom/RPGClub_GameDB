@@ -67,7 +67,7 @@ export function buildReminderMessage(reminder: IReminderRecord): string {
   return (
     `You asked me to remind you: ${reminder.content}\n` +
     `Scheduled for ${time}.${extra}\n` +
-    "Use the buttons below or /remindme commands to snooze or remove this reminder."
+    "Use the buttons below to snooze or remove this reminder."
   );
 }
 
