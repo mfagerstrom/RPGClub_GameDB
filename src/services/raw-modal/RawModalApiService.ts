@@ -275,7 +275,7 @@ export class RawModalApiService implements IRawModalApiService {
       case ComponentType.CheckboxGroup:
         return component.values;
       case ComponentType.RadioGroup:
-        return component.value;
+        return component.value ?? null;
       case ComponentType.Checkbox:
         return component.value;
       default:
