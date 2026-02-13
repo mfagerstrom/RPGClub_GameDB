@@ -30,6 +30,7 @@ import { startThreadLinkPromptService } from "./services/ThreadLinkPromptService
 import { refreshGiveawayHubMessage } from "./services/GiveawayHubService.js";
 import { startGameReleaseAnnouncementService } from "./services/GameReleaseAnnouncementService.js";
 import { startIgdbScanService } from "./services/IgdbScanService.js";
+import { tryHandleManagedRawModalInteraction } from "./services/raw-modal/RawModalInteractionRouter.js";
 installConsoleLogging();
 
 const PRESENCE_CHECK_INTERVAL_MS: number = 30 * 60 * 1000;
@@ -209,6 +210,11 @@ bot.on("interactionCreate", async (interaction: Interaction) => {
     if (interaction.user?.id) {
       void Member.touchLastSeen(interaction.user.id);
     }
+  }
+
+  const handledByRawModalRouter = await tryHandleManagedRawModalInteraction(interaction);
+  if (handledByRawModalRouter) {
+    return;
   }
 
   await bot.executeInteraction(interaction);
