@@ -17,6 +17,7 @@ export interface IRawModalOpenRequest {
   feature: RawModalFeature;
   flow: RawModalFlow;
   sessionId: string;
+  customId?: string;
   title: string;
   components: APIModalInteractionResponseCallbackComponent[];
 }

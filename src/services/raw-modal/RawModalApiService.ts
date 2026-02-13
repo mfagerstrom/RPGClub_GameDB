@@ -32,6 +32,7 @@ import { logRawModal } from "./RawModalLogging.js";
 
 type FetchLike = typeof fetch;
 type SupportedMethod = "POST";
+const RAW_MODAL_HTTP_TIMEOUT_MS = 8000;
 
 export interface IRawModalApiServiceOptions {
   applicationId: string;
@@ -61,14 +62,19 @@ export class RawModalApiService implements IRawModalApiService {
       flow: request.flow,
     });
 
+    const customId = request.customId ?? buildRawModalCustomId({
+      feature: request.feature,
+      flow: request.flow,
+      sessionId: request.sessionId,
+    });
+    if (!customId || customId.length > 100) {
+      throw new Error("Raw modal custom id is missing or exceeds 100 characters.");
+    }
+
     const payload: APIInteractionResponse = {
       type: InteractionResponseType.Modal,
       data: {
-        custom_id: buildRawModalCustomId({
-          feature: request.feature,
-          flow: request.flow,
-          sessionId: request.sessionId,
-        }),
+        custom_id: customId,
         title: request.title,
         components: request.components,
       },
@@ -94,40 +100,92 @@ export class RawModalApiService implements IRawModalApiService {
 
   parseSubmit(interactionPayload: APIInteraction | unknown): IRawModalSubmitContext | null {
     if (!interactionPayload || typeof interactionPayload !== "object") {
-      return null;
-    }
-
-    const interaction = interactionPayload as APIInteraction;
-    if (!Utils.isModalSubmitInteraction(interaction)) {
-      return null;
-    }
-    const validation = this.validateSubmitComponents(interaction);
-    if (!validation.ok) {
       logRawModal("warn", "submit.invalid_payload", {
-        customId: interaction.data.custom_id,
-        userId: interaction.member?.user?.id ?? interaction.user?.id,
-        reason: validation.reason,
+        reason: "payload is not an object",
       });
       return null;
     }
 
-    const submitContext = this.toSubmitContext(interaction);
-    const parsedId = parseRawModalCustomId(submitContext.customId);
-    if (!parsedId) {
-      logRawModal("warn", "submit.invalid_custom_id", {
+    try {
+      const interaction = interactionPayload as APIInteraction;
+      const payloadShape = this.describePayloadShape(interactionPayload);
+      if (!Utils.isModalSubmitInteraction(interaction)) {
+        logRawModal("info", "submit.ignored_non_modal", {
+          reason: payloadShape,
+        });
+        return null;
+      }
+      const validation = this.validateSubmitComponents(interaction);
+      if (!validation.ok) {
+        logRawModal("warn", "submit.invalid_payload", {
+          customId: interaction.data?.custom_id,
+          userId: interaction.member?.user?.id ?? interaction.user?.id,
+          reason: `${validation.reason}; ${payloadShape}`,
+        });
+        return null;
+      }
+
+      const submitContext = this.toSubmitContext(interaction);
+      const parsedId = parseRawModalCustomId(submitContext.customId);
+      if (!parsedId) {
+        logRawModal("warn", "submit.invalid_custom_id", {
+          customId: submitContext.customId,
+          userId: submitContext.userId,
+        });
+        return null;
+      }
+      logRawModal("info", "submit.parsed", {
+        sessionId: parsedId.sessionId,
+        feature: parsedId.feature,
+        flow: parsedId.flow,
         customId: submitContext.customId,
         userId: submitContext.userId,
       });
+      return submitContext;
+    } catch (error: unknown) {
+      logRawModal("error", "submit.parse_failed", {
+        error,
+        reason: this.describePayloadShape(interactionPayload),
+      });
       return null;
     }
-    logRawModal("info", "submit.parsed", {
-      sessionId: parsedId.sessionId,
-      feature: parsedId.feature,
-      flow: parsedId.flow,
-      customId: submitContext.customId,
-      userId: submitContext.userId,
-    });
-    return submitContext;
+  }
+
+  private describePayloadShape(payload: unknown): string {
+    if (!payload || typeof payload !== "object") {
+      return `payload_type=${typeof payload}`;
+    }
+
+    const root = payload as Record<string, unknown>;
+    const rootKeys = Object.keys(root).slice(0, 12).join(",");
+    const data = root.data;
+    const dataObj = data && typeof data === "object"
+      ? data as Record<string, unknown>
+      : null;
+    const dataKeys = dataObj ? Object.keys(dataObj).slice(0, 12).join(",") : "none";
+    const components = dataObj?.components;
+    const componentCount = Array.isArray(components) ? components.length : -1;
+    const componentTypes = Array.isArray(components)
+      ? components
+        .slice(0, 6)
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return "invalid";
+          const typed = entry as { type?: unknown; components?: unknown; component?: unknown };
+          const childCount = Array.isArray(typed.components) ? typed.components.length : 0;
+          const hasLabelChild = Boolean(typed.component);
+          return `type=${String(typed.type ?? "missing")} children=${childCount} hasLabelChild=${hasLabelChild}`;
+        })
+        .join("|")
+      : "none";
+
+    return [
+      `interaction_type=${String(root.type ?? "missing")}`,
+      `has_data=${dataObj ? "true" : "false"}`,
+      `root_keys=${rootKeys || "none"}`,
+      `data_keys=${dataKeys}`,
+      `component_count=${componentCount}`,
+      `component_shapes=${componentTypes}`,
+    ].join(" ");
   }
 
   async ackSubmit(interactionId: string, interactionToken: string): Promise<void> {
@@ -174,16 +232,46 @@ export class RawModalApiService implements IRawModalApiService {
   }
 
   private async postJson<TResult>(url: string, payload: unknown): Promise<TResult> {
-    const response = await this.fetchImpl(url, {
-      method: this.asMethod("POST"),
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(payload),
+    logRawModal("info", "http.post.begin", {
+      reason: `url=${url}`,
+    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), RAW_MODAL_HTTP_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: this.asMethod("POST"),
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (error: unknown) {
+      const isAbort = error instanceof Error && error.name === "AbortError";
+      logRawModal("error", "http.post.failed", {
+        reason: isAbort
+          ? `timeout_ms=${RAW_MODAL_HTTP_TIMEOUT_MS} url=${url}`
+          : `url=${url}`,
+        error,
+      });
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    logRawModal("info", "http.post.response", {
+      reason: `url=${url} status=${response.status}`,
     });
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
+      logRawModal("error", "http.post.non_ok", {
+        reason: `url=${url} status=${response.status} statusText=${response.statusText}`,
+        error: errorText,
+      });
       throw new Error(
         `Raw modal API request failed: ${response.status} ${response.statusText} ${errorText}`,
       );
@@ -198,7 +286,9 @@ export class RawModalApiService implements IRawModalApiService {
 
   private toApiUrl(pathOrUrl: string): string {
     if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-    return new URL(pathOrUrl, this.apiBaseUrl).toString();
+    const normalizedBase = this.apiBaseUrl.replace(/\/+$/, "");
+    const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+    return `${normalizedBase}${normalizedPath}`;
   }
 
   private asMethod(method: SupportedMethod): SupportedMethod {
@@ -213,10 +303,16 @@ export class RawModalApiService implements IRawModalApiService {
 
     const values: RawModalFieldValues = {};
     const attachments: Record<string, APIAttachment> = {};
-    const resolvedAttachments = interaction.data.resolved?.attachments ?? {};
-    const submittedComponents = this.flattenSubmittedComponents(interaction.data.components);
+    const resolvedAttachments = interaction.data?.resolved?.attachments ?? {};
+    const rawComponents = Array.isArray(interaction.data?.components)
+      ? interaction.data.components as APIModalSubmissionComponent[]
+      : [];
+    const submittedComponents = this.flattenSubmittedComponents(rawComponents);
 
     for (const component of submittedComponents) {
+      if (!this.isModalSubmitComponent(component)) {
+        continue;
+      }
       values[component.custom_id] = this.readSubmittedValue(component);
 
       if (component.type !== ComponentType.FileUpload) {
@@ -250,16 +346,30 @@ export class RawModalApiService implements IRawModalApiService {
 
     for (const component of components) {
       if (component.type === ComponentType.ActionRow) {
-        submitted.push(...component.components);
+        for (const child of component.components ?? []) {
+          if (child) {
+            submitted.push(child);
+          }
+        }
         continue;
       }
 
       if (component.type === ComponentType.Label) {
-        submitted.push(component.component);
+        if (component.component) {
+          submitted.push(component.component);
+        }
       }
     }
 
     return submitted;
+  }
+
+  private isModalSubmitComponent(value: unknown): value is ModalSubmitComponent {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const candidate = value as { type?: unknown; custom_id?: unknown };
+    return typeof candidate.type === "number" && typeof candidate.custom_id === "string";
   }
 
   private readSubmittedValue(component: ModalSubmitComponent): RawModalSubmittedValue {
@@ -295,20 +405,36 @@ export class RawModalApiService implements IRawModalApiService {
   private validateSubmitComponents(
     interaction: APIModalSubmitInteraction,
   ): { ok: true } | { ok: false; reason: string } {
-    const customId = interaction.data.custom_id;
+    const interactionData = interaction.data;
+    if (!interactionData || typeof interactionData !== "object") {
+      return { ok: false, reason: "modal interaction data is missing" };
+    }
+
+    const customId = typeof interactionData.custom_id === "string" ? interactionData.custom_id : "";
     if (!customId || customId.length > 100) {
       return { ok: false, reason: "modal custom id is missing or too long" };
     }
 
-    const flatComponents = this.flattenSubmittedComponents(interaction.data.components);
+    const rawComponents = Array.isArray(interactionData.components)
+      ? interactionData.components as APIModalSubmissionComponent[]
+      : [];
+    if (rawComponents.length === 0) {
+      return { ok: false, reason: "modal submission has no top-level components" };
+    }
+
+    const flatComponents = this.flattenSubmittedComponents(rawComponents);
     if (flatComponents.length === 0) {
       return { ok: false, reason: "modal submission has no components" };
     }
 
     const seenIds = new Set<string>();
-    const resolvedAttachments = interaction.data.resolved?.attachments ?? {};
+    const resolvedAttachments = interactionData.resolved?.attachments ?? {};
 
     for (const component of flatComponents) {
+      if (!this.isModalSubmitComponent(component)) {
+        return { ok: false, reason: "modal submission contains an invalid component entry" };
+      }
+
       if (!component.custom_id || component.custom_id.length > 100) {
         return { ok: false, reason: "component custom id is missing or too long" };
       }

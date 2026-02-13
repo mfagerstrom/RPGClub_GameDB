@@ -107,6 +107,7 @@ const TODO_LABEL_EDIT_SELECT_PREFIX = "todo-label-edit-select";
 const TODO_QUERY_BUTTON_PREFIX = "todo-query-button";
 const TODO_QUERY_MODAL_PREFIX = "todo-query-modal";
 const TODO_QUERY_INPUT_ID = "todo-query-input";
+const TODO_REVIEW_SUGGESTIONS_BUTTON_ID = "todo-review-suggestions";
 const TODO_CREATE_TITLE_ID = "todo-create-title";
 const TODO_CREATE_BODY_ID = "todo-create-body";
 const TODO_CREATE_TYPE_ID = "todo-create-type";
@@ -698,14 +699,6 @@ function buildTodoCommentModalId(
   return [TODO_COMMENT_MODAL_PREFIX, payloadToken, page, issueNumber, channelId, messageId].join(":");
 }
 
-function buildTodoEditTitleButtonId(
-  payloadToken: string,
-  page: number,
-  issueNumber: number,
-): string {
-  return [TODO_EDIT_TITLE_BUTTON_PREFIX, payloadToken, page, issueNumber].join(":");
-}
-
 function buildTodoEditTitleModalId(
   payloadToken: string,
   page: number,
@@ -714,14 +707,6 @@ function buildTodoEditTitleModalId(
   messageId: string,
 ): string {
   return [TODO_EDIT_TITLE_MODAL_PREFIX, payloadToken, page, issueNumber, channelId, messageId].join(":");
-}
-
-function buildTodoEditDescButtonId(
-  payloadToken: string,
-  page: number,
-  issueNumber: number,
-): string {
-  return [TODO_EDIT_DESC_BUTTON_PREFIX, payloadToken, page, issueNumber].join(":");
 }
 
 function buildTodoEditDescModalId(
@@ -740,14 +725,6 @@ function buildTodoCloseViewId(payloadToken: string, page: number, issueNumber: n
 
 function buildTodoReopenViewId(payloadToken: string, page: number, issueNumber: number): string {
   return [TODO_REOPEN_VIEW_PREFIX, payloadToken, page, issueNumber].join(":");
-}
-
-function buildTodoLabelEditButtonId(
-  payloadToken: string,
-  page: number,
-  issueNumber: number,
-): string {
-  return [TODO_LABEL_EDIT_BUTTON_PREFIX, payloadToken, page, issueNumber].join(":");
 }
 
 function buildTodoLabelEditSelectId(
@@ -1139,6 +1116,14 @@ function buildIssueListComponents(
     closeButton,
     queryButton,
   );
+  if (suggestionCount > 0) {
+    actionRow.addComponents(
+      new ButtonBuilder()
+        .setCustomId(TODO_REVIEW_SUGGESTIONS_BUTTON_ID)
+        .setLabel("Review Suggestions")
+        .setStyle(ButtonStyle.Primary),
+    );
+  }
 
   const components: Array<ContainerBuilder | ActionRowBuilder<any>> = [
     container,
@@ -1148,7 +1133,7 @@ function buildIssueListComponents(
   if (totalPages > 1) {
     const prevDisabled = payload.page <= 1;
     const nextDisabled = payload.page >= totalPages;
-    actionRow.addComponents(
+    const pagingRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(buildTodoListCustomId(payloadToken, payload.page - 1))
         .setLabel("Prev Page")
@@ -1160,6 +1145,7 @@ function buildIssueListComponents(
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(nextDisabled),
     );
+    components.push(pagingRow);
   }
 
   return { components };

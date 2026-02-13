@@ -1,7 +1,6 @@
 import type { ButtonInteraction, CommandInteraction } from "discord.js";
 import {
   ActionRowBuilder,
-  ApplicationCommandOptionType,
   ButtonBuilder,
   ButtonStyle,
   ContainerBuilder,
@@ -11,16 +10,17 @@ import {
   TextInputBuilder,
   TextInputStyle,
   TextDisplayBuilder,
-  StringSelectMenuBuilder,
-  StringSelectMenuInteraction,
 } from "discord.js";
+import {
+  ComponentType as ApiComponentType,
+  TextInputStyle as ApiTextInputStyle,
+  type APIModalInteractionResponseCallbackComponent,
+} from "discord-api-types/v10";
 import {
   ButtonComponent,
   Discord,
   ModalComponent,
-  SelectMenuComponent,
   Slash,
-  SlashOption,
 } from "discordx";
 import {
   safeDeferReply,
@@ -36,69 +36,50 @@ import {
   countSuggestions,
 } from "../classes/Suggestion.js";
 import {
-  createSuggestionReviewSessionRecord,
-  deleteExpiredSuggestionReviewSessions,
   deleteSuggestionReviewSession,
-  deleteSuggestionReviewSessionsForReviewer,
   getSuggestionReviewSession,
-  updateSuggestionReviewSession,
   type ISuggestionReviewSession,
 } from "../classes/SuggestionReviewSession.js";
 import { createIssue } from "../services/GithubIssuesService.js";
 import { BOT_DEV_CHANNEL_ID, GAMEDB_UPDATES_CHANNEL_ID } from "../config/channels.js";
 import { BOT_DEV_PING_USER_ID } from "../config/users.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
+import { RawModalApiService } from "../services/raw-modal/RawModalApiService.js";
+import { logRawModal } from "../services/raw-modal/RawModalLogging.js";
 
 const SUGGESTION_APPROVE_PREFIX = "suggestion-approve";
-const SUGGESTION_LABEL_SELECT_PREFIX = "suggestion-labels";
-const SUGGESTION_SUBMIT_PREFIX = "suggestion-submit";
-const SUGGESTION_CANCEL_PREFIX = "suggestion-cancel";
+const SUGGESTION_CREATE_MODAL_ID = "suggestion-create-modal";
+const SUGGESTION_CREATE_TITLE_ID = "suggestion-create-title";
+const SUGGESTION_CREATE_DETAILS_ID = "suggestion-create-details";
+const SUGGESTION_CREATE_TYPE_ID = "suggestion-create-type";
 const SUGGESTION_LABELS = ["New Feature", "Improvement", "Bug", "Blocked"] as const;
 type SuggestionLabel = (typeof SUGGESTION_LABELS)[number];
-type SuggestionDraft = {
-  userId: string;
-  title: string;
-  details: string;
-  labels: SuggestionLabel[];
-  createdAt: number;
-};
-const SUGGESTION_DRAFT_TTL_MS = 10 * 60 * 1000;
-const suggestionDrafts = new Map<string, SuggestionDraft>();
 const SUGGESTION_REVIEW_PREFIX = "suggestion-review";
-const SUGGESTION_REJECT_MODAL_PREFIX = "suggestion-reject";
-const SUGGESTION_REJECT_REASON_ID = "suggestion-reject-reason";
+const SUGGESTION_REVIEW_DECISION_MODAL_PREFIX = "suggestion-review-decision";
+const SUGGESTION_REVIEW_SUMMARY_ID = "suggestion-review-summary";
+const SUGGESTION_REVIEW_DECISION_ID = "suggestion-review-decision-choice";
+const SUGGESTION_REVIEW_REASON_ID = "suggestion-review-decision-reason";
 const SUGGESTION_REVIEW_TTL_MS = 15 * 60 * 1000;
 type SuggestionReviewSession = ISuggestionReviewSession;
+const MAX_MODAL_TEXT_INPUT_VALUE = 4000;
 
-function buildSuggestionReviewSessionId(): string {
-  return `suggestion-review-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+function formatErrorForLog(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function isSuggestionReviewSessionExpired(session: SuggestionReviewSession): boolean {
   const lastActivity = session.updatedAt ?? session.createdAt;
   return Date.now() - lastActivity.getTime() > SUGGESTION_REVIEW_TTL_MS;
-}
-
-async function startSuggestionReviewSession(
-  reviewerId: string,
-  suggestionIds: number[],
-  totalCount: number,
-): Promise<SuggestionReviewSession | null> {
-  await deleteExpiredSuggestionReviewSessions(
-    new Date(Date.now() - SUGGESTION_REVIEW_TTL_MS),
-  );
-  await deleteSuggestionReviewSessionsForReviewer(reviewerId);
-  try {
-    return await createSuggestionReviewSessionRecord({
-      sessionId: buildSuggestionReviewSessionId(),
-      reviewerId,
-      suggestionIds,
-      index: 0,
-      totalCount,
-    });
-  } catch {
-    return null;
-  }
 }
 
 async function loadSuggestionReviewSession(
@@ -119,14 +100,6 @@ function buildComponentsV2Flags(isEphemeral: boolean): number {
   return (isEphemeral ? MessageFlags.Ephemeral : 0) | COMPONENTS_V2_FLAG;
 }
 
-function buildSuggestionReviewActionId(
-  action: string,
-  sessionId: string,
-  reviewerId: string,
-): string {
-  return `${SUGGESTION_REVIEW_PREFIX}:${action}:${sessionId}:${reviewerId}`;
-}
-
 function parseSuggestionReviewActionId(
   customId: string,
 ): { action: string; sessionId: string; reviewerId: string } | null {
@@ -138,54 +111,234 @@ function parseSuggestionReviewActionId(
   return action && sessionId && reviewerId ? { action, sessionId, reviewerId } : null;
 }
 
-function buildSuggestionRejectModalId(
-  sessionId: string,
+function buildSuggestionReviewDecisionModalId(
   reviewerId: string,
   suggestionId: number,
 ): string {
-  return `${SUGGESTION_REJECT_MODAL_PREFIX}:${sessionId}:${reviewerId}:${suggestionId}`;
+  return `${SUGGESTION_REVIEW_DECISION_MODAL_PREFIX}:${reviewerId}:${suggestionId}`;
 }
 
-function parseSuggestionRejectModalId(
+function parseSuggestionReviewDecisionModalId(
   customId: string,
-): { sessionId: string; reviewerId: string; suggestionId: number } | null {
+): { reviewerId: string; suggestionId: number } | null {
   const parts = customId.split(":");
-  if (parts.length !== 4 || parts[0] !== SUGGESTION_REJECT_MODAL_PREFIX) {
+  if (parts.length !== 3 || parts[0] !== SUGGESTION_REVIEW_DECISION_MODAL_PREFIX) {
     return null;
   }
-  const suggestionId = Number(parts[3]);
+  const suggestionId = Number(parts[2]);
   if (!Number.isInteger(suggestionId) || suggestionId <= 0) {
     return null;
   }
-  const sessionId = parts[1];
-  const reviewerId = parts[2];
-  return sessionId && reviewerId ? { sessionId, reviewerId, suggestionId } : null;
+  const reviewerId = parts[1];
+  return reviewerId ? { reviewerId, suggestionId } : null;
 }
 
-function buildSuggestionRejectModal(
-  sessionId: string,
+function buildSuggestionReviewDecisionComponents(
+  summaryText: string,
+): APIModalInteractionResponseCallbackComponent[] {
+  const summaryValue = summaryText.length > MAX_MODAL_TEXT_INPUT_VALUE
+    ? `${summaryText.slice(0, MAX_MODAL_TEXT_INPUT_VALUE - 3)}...`
+    : summaryText;
+
+  return [
+    {
+      type: ApiComponentType.ActionRow,
+      components: [
+        {
+          type: ApiComponentType.TextInput,
+          custom_id: SUGGESTION_REVIEW_SUMMARY_ID,
+          label: "Suggestion Review",
+          style: ApiTextInputStyle.Paragraph,
+          required: false,
+          max_length: MAX_MODAL_TEXT_INPUT_VALUE,
+          value: summaryValue,
+        },
+      ],
+    },
+    {
+      type: ApiComponentType.Label,
+      label: "Review Decision",
+      description: "Choose one action",
+      component: {
+        type: ApiComponentType.RadioGroup,
+        custom_id: SUGGESTION_REVIEW_DECISION_ID,
+        required: true,
+        options: [
+          {
+            label: "Accept",
+            value: "accept",
+            description: "Create GitHub issue from this suggestion",
+          },
+          {
+            label: "Reject",
+            value: "reject",
+            description: "Reject and notify the suggestion author",
+          },
+          {
+            label: "Skip",
+            value: "skip",
+            description: "Keep this suggestion pending and move to the next",
+          },
+        ],
+      },
+    },
+    {
+      type: ApiComponentType.ActionRow,
+      components: [
+        {
+          type: ApiComponentType.TextInput,
+          custom_id: SUGGESTION_REVIEW_REASON_ID,
+          label: "Rejection reason (required when Reject)",
+          style: ApiTextInputStyle.Paragraph,
+          required: false,
+          max_length: 1000,
+        },
+      ],
+    },
+  ];
+}
+
+async function openSuggestionReviewDecisionModal(
+  interaction: ButtonInteraction,
   reviewerId: string,
   suggestionId: number,
-): ModalBuilder {
-  const reasonInput = new TextInputBuilder()
-    .setCustomId(SUGGESTION_REJECT_REASON_ID)
-    .setLabel("Reason for rejection")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMaxLength(1000);
+  summaryText: string,
+): Promise<void> {
+  const customId = buildSuggestionReviewDecisionModalId(reviewerId, suggestionId);
+  logRawModal("info", "suggestion.review_modal.open_attempt", {
+    feature: "suggestion",
+    flow: "review-decision",
+    userId: interaction.user.id,
+    customId,
+    reason: `suggestionId=${suggestionId} summaryLen=${summaryText.length}`,
+  });
 
-  return new ModalBuilder()
-    .setCustomId(buildSuggestionRejectModalId(sessionId, reviewerId, suggestionId))
-    .setTitle("Reject Suggestion")
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput));
+  const modalApi = new RawModalApiService({
+    applicationId: interaction.applicationId,
+  });
+  try {
+    await modalApi.openModal({
+      interactionId: interaction.id,
+      interactionToken: interaction.token,
+      feature: "suggestion",
+      flow: "review-decision",
+      sessionId: `suggestion-${suggestionId}`,
+      customId,
+      title: "Suggestion Review Decision",
+      components: buildSuggestionReviewDecisionComponents(summaryText),
+    });
+    logRawModal("info", "suggestion.review_modal.open_success", {
+      feature: "suggestion",
+      flow: "review-decision",
+      userId: interaction.user.id,
+      customId,
+    });
+  } catch (error: unknown) {
+    logRawModal("error", "suggestion.review_modal.open_failed", {
+      feature: "suggestion",
+      flow: "review-decision",
+      userId: interaction.user.id,
+      customId,
+      error: formatErrorForLog(error),
+    });
+    throw error;
+  }
 }
 
 
 
-function formatSuggestionTimestamp(date: Date | null | undefined): string {
+function formatSuggestionTimestampPlain(date: Date | null | undefined): string {
   if (!date) return "Unknown";
-  const timestamp = Math.floor(date.getTime() / 1000);
-  return `<t:${timestamp}:f>`;
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+}
+
+function buildSuggestionReviewSummaryText(
+  suggestion: Awaited<ReturnType<typeof getSuggestionById>>,
+  index: number,
+  total: number,
+): string {
+  if (!suggestion) {
+    return "No pending suggestions found.";
+  }
+
+  const labels = suggestion.labels ? suggestion.labels : "None";
+  const authorLabel = suggestion.createdByName
+    ? `${suggestion.createdByName} (${suggestion.createdBy ?? "Unknown"})`
+    : (suggestion.createdBy ?? "Unknown");
+  const details = suggestion.details ?? "No details provided.";
+
+  return [
+    "Suggestion Review",
+    "-----------------",
+    `Suggestion: #${suggestion.suggestionId} - ${suggestion.title}`,
+    `Labels: ${labels}`,
+    `Submitted by: ${authorLabel}`,
+    `Submitted: ${formatSuggestionTimestampPlain(suggestion.createdAt)}`,
+    `Position: ${index + 1} of ${total}`,
+    "",
+    "Details:",
+    details,
+  ].join("\n");
+}
+
+function extractReviewDecisionFromInteraction(
+  interaction: ModalSubmitInteraction,
+): { decision: string | null; reason: string } {
+  let decision: string | null = null;
+
+  const components = (interaction.components ?? []) as Array<{
+    type?: number;
+    components?: Array<{ customId?: string; value?: unknown; values?: unknown }>;
+    component?: { customId?: string; value?: unknown; values?: unknown };
+  }>;
+
+  const flatFields: Array<{ customId?: string; value?: unknown; values?: unknown }> = [];
+  for (const topLevel of components) {
+    if (!topLevel || typeof topLevel !== "object") {
+      continue;
+    }
+    if (Array.isArray(topLevel.components)) {
+      flatFields.push(...topLevel.components);
+      continue;
+    }
+    if (topLevel.component && typeof topLevel.component === "object") {
+      flatFields.push(topLevel.component);
+    }
+  }
+
+  for (const field of flatFields) {
+    if (!field || field.customId !== SUGGESTION_REVIEW_DECISION_ID) {
+      continue;
+    }
+    if (typeof field.value === "string") {
+      decision = field.value;
+      break;
+    }
+    if (Array.isArray(field.values) && typeof field.values[0] === "string") {
+      decision = field.values[0];
+      break;
+    }
+  }
+
+  let reason = "";
+  try {
+    const rawReason = interaction.fields.getTextInputValue(SUGGESTION_REVIEW_REASON_ID);
+    reason = sanitizeUserInput(rawReason, { preserveNewlines: true });
+  } catch {
+    reason = "";
+  }
+
+  return { decision, reason };
 }
 
 function buildSuggestionReviewContainer(
@@ -206,23 +359,10 @@ function buildSuggestionReviewContainer(
     return container;
   }
 
-  const labels = suggestion.labels ? suggestion.labels : "None";
-  const authorMention = suggestion.createdBy ? `<@${suggestion.createdBy}>` : "Unknown";
-  const authorLabel = suggestion.createdByName
-    ? `${authorMention} (${suggestion.createdByName})`
-    : authorMention;
-  const details = suggestion.details ?? "No details provided.";
-
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      `**Suggestion:** #${suggestion.suggestionId} - ${suggestion.title}`,
+      buildSuggestionReviewSummaryText(suggestion, index, total),
     ),
-    new TextDisplayBuilder().setContent(`**Labels:** ${labels}`),
-    new TextDisplayBuilder().setContent(`**Submitted by:** ${authorLabel}`),
-    new TextDisplayBuilder().setContent(
-      `**Submitted:** ${formatSuggestionTimestamp(suggestion.createdAt)}`,
-    ),
-    new TextDisplayBuilder().setContent(`**Position:** ${index + 1} of ${total}`),
   );
 
   if (totalCount > total) {
@@ -232,47 +372,7 @@ function buildSuggestionReviewContainer(
       ),
     );
   }
-
-  container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("**Details:**"),
-    new TextDisplayBuilder().setContent(details),
-  );
-
   return container;
-}
-
-function buildSuggestionReviewButtons(
-  sessionId: string,
-  reviewerId: string,
-  hasSuggestion: boolean,
-  hasNext: boolean,
-): ActionRowBuilder<ButtonBuilder>[] {
-  if (!hasSuggestion) return [];
-
-  const approveButton = new ButtonBuilder()
-    .setCustomId(buildSuggestionReviewActionId("approve", sessionId, reviewerId))
-    .setLabel("Approve")
-    .setStyle(ButtonStyle.Success);
-
-  const rejectButton = new ButtonBuilder()
-    .setCustomId(buildSuggestionReviewActionId("reject", sessionId, reviewerId))
-    .setLabel("Reject")
-    .setStyle(ButtonStyle.Danger);
-
-  const nextButton = new ButtonBuilder()
-    .setCustomId(buildSuggestionReviewActionId("next", sessionId, reviewerId))
-    .setLabel(hasNext ? "Next" : "Finish")
-    .setStyle(ButtonStyle.Secondary);
-
-  const cancelButton = new ButtonBuilder()
-    .setCustomId(buildSuggestionReviewActionId("cancel", sessionId, reviewerId))
-    .setLabel("Close")
-    .setStyle(ButtonStyle.Danger);
-
-  return [
-    new ActionRowBuilder<ButtonBuilder>().addComponents(approveButton, rejectButton, nextButton),
-    new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton),
-  ];
 }
 
 async function getCurrentSuggestionForReview(
@@ -296,27 +396,6 @@ async function getCurrentSuggestionForReview(
     index: Math.max(0, session.suggestionIds.length - 1),
     total: session.suggestionIds.length,
   };
-}
-
-async function buildSuggestionReviewPayload(
-  session: SuggestionReviewSession,
-): Promise<{ components: Array<ContainerBuilder | ActionRowBuilder<ButtonBuilder>> }> {
-  const current = await getCurrentSuggestionForReview(session);
-  const hasSuggestion = Boolean(current.suggestion);
-  const hasNext = session.index < session.suggestionIds.length - 1;
-  const container = buildSuggestionReviewContainer(
-    current.suggestion,
-    current.index,
-    Math.max(current.total, 1),
-    session.totalCount,
-  );
-  const buttons = buildSuggestionReviewButtons(
-    session.sessionId,
-    session.reviewerId,
-    hasSuggestion,
-    hasNext,
-  );
-  return { components: [container, ...buttons] };
 }
 
 function getSuggestionAuthorMention(
@@ -352,107 +431,79 @@ function parseSuggestionApproveId(id: string): number | null {
   return Number.isInteger(suggestionId) && suggestionId > 0 ? suggestionId : null;
 }
 
-function buildSuggestionLabelSelectId(draftId: string): string {
-  return `${SUGGESTION_LABEL_SELECT_PREFIX}:${draftId}`;
-}
+function buildSuggestionCreateModal(): ModalBuilder {
+  const titleInput = new TextInputBuilder()
+    .setCustomId(SUGGESTION_CREATE_TITLE_ID)
+    .setLabel("Title")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(256);
 
-function buildSuggestionSubmitId(draftId: string): string {
-  return `${SUGGESTION_SUBMIT_PREFIX}:${draftId}`;
-}
+  const detailsInput = new TextInputBuilder()
+    .setCustomId(SUGGESTION_CREATE_DETAILS_ID)
+    .setLabel("Description")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(4000);
 
-function buildSuggestionCancelId(draftId: string): string {
-  return `${SUGGESTION_CANCEL_PREFIX}:${draftId}`;
-}
-
-function parseSuggestionDraftId(id: string, prefix: string): string | null {
-  const parts = id.split(":");
-  if (parts.length !== 2 || parts[0] !== prefix) {
-    return null;
-  }
-  return parts[1] || null;
-}
-
-function createSuggestionDraft(
-  userId: string,
-  title: string,
-  details: string,
-): string {
-  const draftId = `suggestion-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-  suggestionDrafts.set(draftId, {
-    userId,
-    title,
-    details,
-    labels: [],
-    createdAt: Date.now(),
-  });
-  return draftId;
-}
-
-function getSuggestionDraft(draftId: string): SuggestionDraft | null {
-  const draft = suggestionDrafts.get(draftId);
-  if (!draft) return null;
-  if (Date.now() - draft.createdAt > SUGGESTION_DRAFT_TTL_MS) {
-    suggestionDrafts.delete(draftId);
-    return null;
-  }
-  return draft;
-}
-
-function buildSuggestionDraftComponents(
-  draftId: string,
-  draft: SuggestionDraft,
-): Array<ActionRowBuilder<any>> {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(buildSuggestionLabelSelectId(draftId))
-    .setPlaceholder("Select labels (multi-select)")
-    .setMinValues(0)
-    .setMaxValues(SUGGESTION_LABELS.length)
-    .addOptions(
-      SUGGESTION_LABELS.map((label) => ({
-        label,
-        value: label,
-        default: draft.labels.includes(label),
-      })),
+  const modal = new ModalBuilder()
+    .setCustomId(SUGGESTION_CREATE_MODAL_ID)
+    .setTitle("Submit Suggestion")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(detailsInput),
     );
-  const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(buildSuggestionSubmitId(draftId))
-      .setLabel("Submit")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(buildSuggestionCancelId(draftId))
-      .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary),
+  modal.addLabelComponents((label) =>
+    label
+      .setLabel("Suggestion Type(s)")
+      .setDescription("Select one or more suggestion types")
+      .setStringSelectMenuComponent((builder) =>
+        builder
+          .setCustomId(SUGGESTION_CREATE_TYPE_ID)
+          .setPlaceholder("Select type(s)")
+          .setMinValues(1)
+          .setMaxValues(SUGGESTION_LABELS.length)
+          .addOptions(
+            SUGGESTION_LABELS.map((typeLabel) => ({
+              label: typeLabel,
+              value: typeLabel,
+            })),
+          )),
   );
 
-  return [selectRow, buttonRow];
+  return modal;
+}
+
+function parseSuggestionLabels(values: readonly string[]): SuggestionLabel[] {
+  const validValues = new Set(SUGGESTION_LABELS);
+  return values
+    .filter((value): value is SuggestionLabel => validValues.has(value as SuggestionLabel))
+    .filter((value, index, arr) => arr.indexOf(value) === index);
 }
 
 @Discord()
 export class SuggestionCommand {
   @Slash({ description: "Submit a bot suggestion", name: "suggestion" })
-  async suggestion(
-    @SlashOption({
-      description: "Short suggestion title",
-      name: "title",
-      required: true,
-      type: ApplicationCommandOptionType.String,
-    })
-    title: string,
-    @SlashOption({
-      description: "Details to include in the GitHub issue",
-      name: "details",
-      required: true,
-      type: ApplicationCommandOptionType.String,
-    })
-    details: string,
-    interaction: CommandInteraction,
-  ): Promise<void> {
+  async suggestion(interaction: CommandInteraction): Promise<void> {
+    await interaction.showModal(buildSuggestionCreateModal()).catch(async () => {
+      await safeReply(interaction, {
+        content: "Unable to open the suggestion form.",
+        flags: MessageFlags.Ephemeral,
+      });
+    });
+  }
+
+  @ModalComponent({ id: /^suggestion-create-modal$/ })
+  async submitSuggestionCreateModal(interaction: ModalSubmitInteraction): Promise<void> {
     await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
 
-    const trimmedTitle = sanitizeUserInput(title, { preserveNewlines: false });
+    const rawTitle = interaction.fields.getTextInputValue(SUGGESTION_CREATE_TITLE_ID);
+    const rawDetails = interaction.fields.getTextInputValue(SUGGESTION_CREATE_DETAILS_ID);
+    const selectedLabels = parseSuggestionLabels(
+      interaction.fields.getStringSelectValues(SUGGESTION_CREATE_TYPE_ID),
+    );
+    const trimmedTitle = sanitizeUserInput(rawTitle, { preserveNewlines: false });
     if (!trimmedTitle) {
       await safeReply(interaction, {
         content: "Title cannot be empty.",
@@ -461,7 +512,7 @@ export class SuggestionCommand {
       return;
     }
 
-    const trimmedDetails = sanitizeUserInput(details, { preserveNewlines: true });
+    const trimmedDetails = sanitizeUserInput(rawDetails, { preserveNewlines: true });
     if (!trimmedDetails) {
       await safeReply(interaction, {
         content: "Details cannot be empty.",
@@ -470,35 +521,60 @@ export class SuggestionCommand {
       return;
     }
 
-    const draftId = createSuggestionDraft(
-      interaction.user.id,
-      trimmedTitle,
-      trimmedDetails,
-    );
-    const draft = getSuggestionDraft(draftId);
-    if (!draft) {
+    if (selectedLabels.length === 0) {
       await safeReply(interaction, {
-        content: "Unable to start suggestion workflow.",
+        content: "Select at least one suggestion type.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const components = buildSuggestionDraftComponents(draftId, draft);
+    const suggestion = await createSuggestion(
+      trimmedTitle,
+      trimmedDetails,
+      selectedLabels.join(", "),
+      interaction.user.id,
+      interaction.user.username,
+    );
+
     await safeReply(interaction, {
-      content: "Select labels for the suggestion, then submit.",
-      components,
+      content: `Thanks! Suggestion #${suggestion.suggestionId} submitted.`,
       flags: MessageFlags.Ephemeral,
     });
+
+    try {
+      const channel = await interaction.client.channels.fetch(BOT_DEV_CHANNEL_ID);
+      if (channel && "send" in channel) {
+        await (channel as any).send({
+          content:
+            `<@${BOT_DEV_PING_USER_ID}> ${interaction.user.username} has submitted a suggestion!`,
+        });
+      }
+    } catch {
+      // ignore notification failures
+    }
   }
 
-  @Slash({ description: "Review pending bot suggestions", name: "suggestion-review" })
-  async reviewSuggestions(interaction: CommandInteraction): Promise<void> {
-    await safeDeferReply(interaction, { flags: buildComponentsV2Flags(true) });
+  @ButtonComponent({ id: /^todo-review-suggestions$/ })
+  async reviewSuggestionsFromTodo(interaction: ButtonInteraction): Promise<void> {
+    logRawModal("info", "suggestion.review_button.clicked", {
+      feature: "suggestion",
+      flow: "review-decision",
+      userId: interaction.user.id,
+      customId: interaction.customId,
+      reason: `guildId=${interaction.guildId ?? "none"} channelId=${interaction.channelId ?? "none"}`,
+    });
 
     const isOwner = interaction.guild?.ownerId === interaction.user.id;
     const isBotDev = interaction.user.id === BOT_DEV_PING_USER_ID;
     if (!isOwner && !isBotDev) {
+      logRawModal("warn", "suggestion.review_button.denied", {
+        feature: "suggestion",
+        flow: "review-decision",
+        userId: interaction.user.id,
+        customId: interaction.customId,
+        reason: "not_owner_or_bot_dev",
+      });
       await safeReply(interaction, {
         content: "Only the server owner or bot dev can review suggestions.",
         flags: MessageFlags.Ephemeral,
@@ -507,39 +583,67 @@ export class SuggestionCommand {
     }
 
     const [suggestions, totalCount] = await Promise.all([
-      listSuggestions(50),
+      listSuggestions(1),
       countSuggestions(),
     ]);
 
     if (!suggestions.length) {
-      const container = buildSuggestionReviewContainer(null, 0, 0, totalCount);
+      logRawModal("info", "suggestion.review_button.no_pending", {
+        feature: "suggestion",
+        flow: "review-decision",
+        userId: interaction.user.id,
+        customId: interaction.customId,
+      });
       await safeReply(interaction, {
-        components: [container],
-        flags: buildComponentsV2Flags(true),
+        content: "No pending suggestions to review.",
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const suggestionIds = suggestions.map((suggestion) => suggestion.suggestionId).reverse();
-    const session = await startSuggestionReviewSession(
-      interaction.user.id,
-      suggestionIds,
-      totalCount,
+    const currentSuggestion = suggestions[0];
+    if (!currentSuggestion) {
+      logRawModal("warn", "suggestion.review_button.missing_first", {
+        feature: "suggestion",
+        flow: "review-decision",
+        userId: interaction.user.id,
+        customId: interaction.customId,
+        reason: `totalCount=${totalCount}`,
+      });
+      await safeReply(interaction, {
+        content: "No pending suggestions to review.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const summaryText = buildSuggestionReviewSummaryText(
+      currentSuggestion,
+      0,
+      Math.max(totalCount, 1),
     );
-    if (!session) {
-      const container = buildSuggestionReviewContainer(null, 0, 0, totalCount);
-      await safeReply(interaction, {
-        components: [container],
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
 
-    const payload = await buildSuggestionReviewPayload(session);
-    await safeReply(interaction, {
-      ...payload,
-      flags: buildComponentsV2Flags(true),
-    });
+    try {
+      await openSuggestionReviewDecisionModal(
+        interaction,
+        interaction.user.id,
+        currentSuggestion.suggestionId,
+        summaryText,
+      );
+    } catch (error: unknown) {
+      logRawModal("error", "suggestion.review_button.open_failed", {
+        feature: "suggestion",
+        flow: "review-decision",
+        userId: interaction.user.id,
+        customId: interaction.customId,
+        reason: `suggestionId=${currentSuggestion.suggestionId}`,
+        error: formatErrorForLog(error),
+      });
+      await safeReply(interaction, {
+        content: "Unable to open the review decision form.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
   }
 
   @ButtonComponent({ id: /^suggestion-approve:\d+$/ })
@@ -631,7 +735,7 @@ export class SuggestionCommand {
     if (!session) {
       const container = new ContainerBuilder().addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          "This suggestion review has expired. Run /suggestion-review again.",
+          "This suggestion review has expired. Start again from /todo.",
         ),
       );
       await safeUpdate(interaction, {
@@ -653,18 +757,7 @@ export class SuggestionCommand {
       return;
     }
 
-    if (parsed.action === "next") {
-      session.index = Math.min(session.index + 1, session.suggestionIds.length);
-      await updateSuggestionReviewSession(session);
-      const payload = await buildSuggestionReviewPayload(session);
-      await safeUpdate(interaction, {
-        ...payload,
-        flags: buildComponentsV2Flags(true),
-      });
-      return;
-    }
-
-    if (parsed.action === "approve") {
+    if (parsed.action === "decide") {
       const current = await getCurrentSuggestionForReview(session);
       if (!current.suggestion) {
         const container = buildSuggestionReviewContainer(null, 0, 0, session.totalCount);
@@ -674,76 +767,41 @@ export class SuggestionCommand {
         });
         return;
       }
-
-      const authorName = current.suggestion.createdByName ?? "Unknown";
-      const description = current.suggestion.details ?? "No details provided.";
-      const body = `${authorName}: ${description}`;
-      const labels = current.suggestion.labels
-        ? current.suggestion.labels.split(",").map((label) => label.trim()).filter(Boolean)
-        : [];
-
-      let issue;
       try {
-        issue = await createIssue({
-          title: current.suggestion.title,
-          body,
-          labels,
+        await openSuggestionReviewDecisionModal(
+          interaction,
+          parsed.reviewerId,
+          current.suggestion.suggestionId,
+          buildSuggestionReviewSummaryText(
+            current.suggestion,
+            current.index,
+            Math.max(current.total, 1),
+          ),
+        );
+      } catch (error: unknown) {
+        logRawModal("error", "suggestion.review_action.open_failed", {
+          feature: "suggestion",
+          flow: "review-decision",
+          userId: interaction.user.id,
+          customId: interaction.customId,
+          reason: `suggestionId=${current.suggestion.suggestionId}`,
+          error: formatErrorForLog(error),
         });
-        await deleteSuggestion(current.suggestion.suggestionId);
-      } catch (err: any) {
         await safeReply(interaction, {
-          content: err?.message ?? "Failed to create GitHub issue.",
+          content: "Unable to open the review decision form.",
           flags: MessageFlags.Ephemeral,
         });
-        return;
       }
-
-      const authorMention = getSuggestionAuthorMention(current.suggestion);
-      await sendSuggestionUpdateMessage(
-        interaction,
-        `${authorMention} Your suggestion was accepted and logged as GitHub issue #${issue.number}: ${issue.htmlUrl}`,
-      );
-
-      session.suggestionIds.splice(session.index, 1);
-      session.totalCount = Math.max(0, session.totalCount - 1);
-      await updateSuggestionReviewSession(session);
-
-      const payload = await buildSuggestionReviewPayload(session);
-      await safeUpdate(interaction, {
-        ...payload,
-        flags: buildComponentsV2Flags(true),
-      });
       return;
-    }
-
-    if (parsed.action === "reject") {
-      const current = await getCurrentSuggestionForReview(session);
-      if (!current.suggestion) {
-        const container = buildSuggestionReviewContainer(null, 0, 0, session.totalCount);
-        await safeUpdate(interaction, {
-          components: [container],
-          flags: buildComponentsV2Flags(true),
-        });
-        return;
-      }
-      await interaction
-        .showModal(
-          buildSuggestionRejectModal(
-            parsed.sessionId,
-            parsed.reviewerId,
-            current.suggestion.suggestionId,
-          ),
-        )
-        .catch(() => {});
     }
   }
 
-  @ModalComponent({ id: /^suggestion-reject:.+:.+:\d+$/ })
-  async submitSuggestionReject(interaction: ModalSubmitInteraction): Promise<void> {
-    const parsed = parseSuggestionRejectModalId(interaction.customId);
+  @ModalComponent({ id: /^suggestion-review-decision:.+:\d+$/ })
+  async submitSuggestionReviewDecision(interaction: ModalSubmitInteraction): Promise<void> {
+    const parsed = parseSuggestionReviewDecisionModalId(interaction.customId);
     if (!parsed) {
       await safeReply(interaction, {
-        content: "This rejection form expired.",
+        content: "This review decision form expired.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -757,20 +815,39 @@ export class SuggestionCommand {
       return;
     }
 
-    const session = await loadSuggestionReviewSession(parsed.sessionId, parsed.reviewerId);
-    if (!session) {
+    const modalApi = new RawModalApiService({
+      applicationId: interaction.applicationId,
+    });
+    const submit = modalApi.parseSubmit(interaction.toJSON());
+    const fallbackExtracted = extractReviewDecisionFromInteraction(interaction);
+    if (!submit) {
+      logRawModal("warn", "suggestion.review_submit.fallback_parser_used", {
+        feature: "suggestion",
+        flow: "review-decision",
+        userId: interaction.user.id,
+        customId: interaction.customId,
+        reason: `decision=${fallbackExtracted.decision ?? "null"} reasonLen=${fallbackExtracted.reason.length}`,
+      });
+    }
+
+    const rawDecision = submit?.values[SUGGESTION_REVIEW_DECISION_ID];
+    const decision = typeof rawDecision === "string" ? rawDecision : fallbackExtracted.decision;
+    if (decision !== "accept" && decision !== "reject" && decision !== "skip") {
       await safeReply(interaction, {
-        content: "This suggestion review has expired. Run /suggestion-review again.",
+        content: "Select Accept, Reject, or Skip.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const rawReason = interaction.fields.getTextInputValue(SUGGESTION_REJECT_REASON_ID);
-    const reason = sanitizeUserInput(rawReason, { preserveNewlines: true });
-    if (!reason) {
+    const rawReason = submit?.values[SUGGESTION_REVIEW_REASON_ID];
+    const reason = typeof rawReason === "string"
+      ? sanitizeUserInput(rawReason, { preserveNewlines: true })
+      : fallbackExtracted.reason;
+
+    if (decision === "reject" && !reason) {
       await safeReply(interaction, {
-        content: "Rejection reason cannot be empty.",
+        content: "Rejection reason cannot be empty when Reject is selected.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -778,140 +855,75 @@ export class SuggestionCommand {
 
     await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
 
-    const suggestion = await getSuggestionById(parsed.suggestionId);
-    if (suggestion) {
-      try {
-        await deleteSuggestion(parsed.suggestionId);
-      } catch (err: any) {
-        await safeReply(interaction, {
-          content: err?.message ?? "Failed to reject suggestion.",
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
+    if (decision === "accept") {
+      const suggestion = await getSuggestionById(parsed.suggestionId);
+      if (suggestion) {
+        const authorName = suggestion.createdByName ?? "Unknown";
+        const description = suggestion.details ?? "No details provided.";
+        const body = `${authorName}: ${description}`;
+        const labels = suggestion.labels
+          ? suggestion.labels.split(",").map((label) => label.trim()).filter(Boolean)
+          : [];
+
+        let issue;
+        try {
+          issue = await createIssue({
+            title: suggestion.title,
+            body,
+            labels,
+          });
+          await deleteSuggestion(parsed.suggestionId);
+        } catch (err: any) {
+          await safeReply(interaction, {
+            content: err?.message ?? "Failed to create GitHub issue.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const authorMention = getSuggestionAuthorMention(suggestion);
+        await sendSuggestionUpdateMessage(
+          interaction,
+          `${authorMention} Your suggestion was accepted and logged as GitHub issue #${issue.number}: ${issue.htmlUrl}`,
+        );
       }
 
-      const authorMention = getSuggestionAuthorMention(suggestion);
-      await sendSuggestionUpdateMessage(
-        interaction,
-        `${authorMention} Your suggestion "${suggestion.title}" was not accepted. Reason: ${reason}`,
-      );
-    }
+    } else if (decision === "reject") {
+      const suggestion = await getSuggestionById(parsed.suggestionId);
+      if (suggestion) {
+        try {
+          await deleteSuggestion(parsed.suggestionId);
+        } catch (err: any) {
+          await safeReply(interaction, {
+            content: err?.message ?? "Failed to reject suggestion.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
 
-    const removeIndex = session.suggestionIds.indexOf(parsed.suggestionId);
-    if (removeIndex !== -1) {
-      session.suggestionIds.splice(removeIndex, 1);
-      if (session.index > removeIndex) {
-        session.index -= 1;
+        const authorMention = getSuggestionAuthorMention(suggestion);
+        await sendSuggestionUpdateMessage(
+          interaction,
+          `${authorMention} Your suggestion "${suggestion.title}" was not accepted. Reason: ${reason}`,
+        );
       }
-      if (session.index >= session.suggestionIds.length) {
-        session.index = Math.max(0, session.suggestionIds.length - 1);
-      }
-      session.totalCount = Math.max(0, session.totalCount - 1);
-    }
-    await updateSuggestionReviewSession(session);
 
-    const payload = await buildSuggestionReviewPayload(session);
-    if (interaction.message) {
-      await interaction.message.edit({ components: payload.components }).catch(() => {});
+    } else {
+      // Skip keeps suggestion pending; reviewer can open the next form from /todo.
     }
 
-    try {
-      await interaction.deleteReply();
-    } catch {
-      // ignore
-    }
-  }
-
-  @SelectMenuComponent({ id: /^suggestion-labels:.+$/ })
-  async setSuggestionLabels(interaction: StringSelectMenuInteraction): Promise<void> {
-    const draftId = parseSuggestionDraftId(interaction.customId, SUGGESTION_LABEL_SELECT_PREFIX);
-    if (!draftId) {
-      await safeUpdate(interaction, { components: [] });
-      return;
-    }
-
-    const draft = getSuggestionDraft(draftId);
-    if (!draft || draft.userId !== interaction.user.id) {
-      await safeUpdate(interaction, { components: [] });
-      return;
-    }
-
-    draft.labels = interaction.values
-      .map((value) => SUGGESTION_LABELS.find((label) => label === value))
-      .filter((label): label is SuggestionLabel => Boolean(label));
-    draft.createdAt = Date.now();
-    suggestionDrafts.set(draftId, draft);
-
-    const components = buildSuggestionDraftComponents(draftId, draft);
-    await safeUpdate(interaction, {
-      content: "Select labels for the suggestion, then submit.",
-      components,
+    const remainingCount = await countSuggestions();
+    const outcomeLabel = decision === "accept"
+      ? "Accepted."
+      : decision === "reject"
+        ? "Rejected."
+        : "Skipped.";
+    await safeReply(interaction, {
+      content: remainingCount > 0
+        ? `${outcomeLabel} ${remainingCount} suggestion(s) remain. Use Review Suggestions again from /todo.`
+        : `${outcomeLabel} No pending suggestions remain.`,
       flags: MessageFlags.Ephemeral,
     });
   }
 
-  @ButtonComponent({ id: /^suggestion-submit:.+$/ })
-  async submitSuggestion(interaction: ButtonInteraction): Promise<void> {
-    const draftId = parseSuggestionDraftId(interaction.customId, SUGGESTION_SUBMIT_PREFIX);
-    if (!draftId) {
-      await safeUpdate(interaction, { components: [] });
-      return;
-    }
-
-    const draft = getSuggestionDraft(draftId);
-    if (!draft || draft.userId !== interaction.user.id) {
-      await safeUpdate(interaction, { components: [] });
-      return;
-    }
-
-    const suggestion = await createSuggestion(
-      draft.title,
-      draft.details,
-      draft.labels.length ? draft.labels.join(", ") : null,
-      interaction.user.id,
-      interaction.user.username,
-    );
-
-    suggestionDrafts.delete(draftId);
-
-    await safeUpdate(interaction, {
-      content: `Thanks! Suggestion #${suggestion.suggestionId} submitted.`,
-      components: [],
-      flags: MessageFlags.Ephemeral,
-    });
-
-    try {
-      const channel = await interaction.client.channels.fetch(BOT_DEV_CHANNEL_ID);
-      if (channel && "send" in channel) {
-        await (channel as any).send({
-          content:
-            `<@${BOT_DEV_PING_USER_ID}> ${interaction.user.username} has submitted a suggestion!`,
-        });
-      }
-    } catch {
-      // ignore notification failures
-    }
-  }
-
-  @ButtonComponent({ id: /^suggestion-cancel:.+$/ })
-  async cancelSuggestion(interaction: ButtonInteraction): Promise<void> {
-    const draftId = parseSuggestionDraftId(interaction.customId, SUGGESTION_CANCEL_PREFIX);
-    if (!draftId) {
-      await safeUpdate(interaction, { components: [] });
-      return;
-    }
-
-    const draft = getSuggestionDraft(draftId);
-    if (!draft || draft.userId !== interaction.user.id) {
-      await safeUpdate(interaction, { components: [] });
-      return;
-    }
-
-    suggestionDrafts.delete(draftId);
-    await safeUpdate(interaction, {
-      content: "Suggestion cancelled.",
-      components: [],
-      flags: MessageFlags.Ephemeral,
-    });
-  }
 }

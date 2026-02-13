@@ -1,6 +1,7 @@
 import {
   RAW_MODAL_CUSTOM_ID_PREFIX,
   RAW_MODAL_SCHEMA_VERSION,
+  RAW_MODAL_SUGGESTION_PILOT_FLOWS,
   RAW_MODAL_SUPPORTED_FEATURES,
   RAW_MODAL_TODO_PILOT_FLOWS,
 } from "./RawModalScope.js";
@@ -24,7 +25,10 @@ function isSupportedFeature(value: string): value is RawModalFeature {
 }
 
 function isSupportedFlow(value: string): value is RawModalFlow {
-  return RAW_MODAL_TODO_PILOT_FLOWS.includes(value as RawModalFlow);
+  return (
+    (RAW_MODAL_TODO_PILOT_FLOWS as readonly string[]).includes(value)
+    || (RAW_MODAL_SUGGESTION_PILOT_FLOWS as readonly string[]).includes(value)
+  );
 }
 
 function isSessionIdValid(sessionId: string): boolean {

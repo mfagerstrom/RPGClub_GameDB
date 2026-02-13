@@ -1,5 +1,5 @@
 import type { RawModalFeature } from "./RawModalScope.js";
-import { RAW_MODAL_PILOT_FEATURE } from "./RawModalScope.js";
+import { RAW_MODAL_PILOT_FEATURES } from "./RawModalScope.js";
 
 const RAW_IMPROVED_MODALS_ENV = "USE_RAW_IMPROVED_MODALS";
 const RAW_MODAL_PILOT_GUILD_IDS_ENV = "RAW_MODAL_PILOT_GUILD_IDS";
@@ -23,7 +23,7 @@ export function isRawImprovedModalsEnabled(): boolean {
 }
 
 export function isRawModalPilotFeature(feature: RawModalFeature): boolean {
-  return feature === RAW_MODAL_PILOT_FEATURE;
+  return RAW_MODAL_PILOT_FEATURES.includes(feature);
 }
 
 export function isRawModalPilotEnabledForGuild(guildId?: string | null): boolean {

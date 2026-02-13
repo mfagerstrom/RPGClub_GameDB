@@ -1,5 +1,18 @@
 # Commit snapshot (2026-02-13)
 
+ac812b1 2026-02-13 C:/Program Files/Git/todo edit button UX improvements
+8fcf8a1 2026-02-13 modal api fix
+72f2a63 2026-02-13 modal api fix
+89184b8 2026-02-13 improved /todo create issue ux
+94e2db8 2026-02-13 fixed a bug
+d4af611 2026-02-13 modal support would require the files
+d2dc42b 2026-02-13 raw api modal support
+eb6211a 2026-02-13 the start of raw api modal support
+8cedc5e 2026-02-09 emoji improvements
+2590f49 2026-02-09 fix: import improvements
+
+# Commit snapshot (2026-02-13)
+
 8cedc5e 2026-02-09 emoji improvements
 2590f49 2026-02-09 fix: import improvements
 a4ae0e7 2026-02-06 Failed experiment with xbox game library importing
@@ -401,3 +414,4 @@ f1e9904 2026-01-30 issue-136: Added more labels to /todo
 48e6ae5 2026-02-05 refactored steam import
 8360a76 2026-02-05 chore: updated readme
 4b45e5b 2026-02-05 chore: updated readme
+
