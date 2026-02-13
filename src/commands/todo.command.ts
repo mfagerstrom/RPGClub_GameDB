@@ -16,7 +16,6 @@ import {
 import {
   ButtonBuilder as V2ButtonBuilder,
   ContainerBuilder,
-  LabelBuilder,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   SectionBuilder,
@@ -1536,27 +1535,27 @@ export class TodoCommand {
       .setRequired(true)
       .setMaxLength(MAX_ISSUE_BODY);
 
-    const typeLabel = new LabelBuilder()
-      .setLabel("Issue Type(s)")
-      .setDescription("Select one or more issue types")
-      .setStringSelectMenuComponent((builder) =>
-        builder
-          .setCustomId(TODO_CREATE_TYPE_ID)
-          .setPlaceholder("Select type(s)")
-          .setMinValues(1)
-          .setMaxValues(TODO_CREATE_TYPE_LABELS.length)
-          .addOptions(
-            TODO_CREATE_TYPE_LABELS.map((label) => ({
-              label,
-              value: label,
-            })),
-          ));
-
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyInput),
     );
-    modal.addLabelComponents(typeLabel);
+    modal.addLabelComponents((label) =>
+      label
+        .setLabel("Issue Type(s)")
+        .setDescription("Select one or more issue types")
+        .setStringSelectMenuComponent((builder) =>
+          builder
+            .setCustomId(TODO_CREATE_TYPE_ID)
+            .setPlaceholder("Select type(s)")
+            .setMinValues(1)
+            .setMaxValues(TODO_CREATE_TYPE_LABELS.length)
+            .addOptions(
+              TODO_CREATE_TYPE_LABELS.map((typeLabel) => ({
+                label: typeLabel,
+                value: typeLabel,
+              })),
+            )),
+    );
 
     await interaction.showModal(modal);
   }
