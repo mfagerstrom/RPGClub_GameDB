@@ -246,9 +246,6 @@ function buildProfileFields(
       } else {
         lines.push(entry.title);
       }
-      if (entry.note) {
-        lines.push(`> ${entry.note}`);
-      }
     });
     fields.push({
       label: "Now Playing",
