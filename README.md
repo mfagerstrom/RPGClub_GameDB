@@ -23,7 +23,7 @@ RPGClub GameDB Bot is a Discord bot that powers GameDB lookups, Monthly Games wo
 
 Use `/help` in Discord for full syntax and parameters. Major command groups include:
 
-- Monthly games: `/gotm`, `/nr-gotm`, `/round`, `/nextvote`
+- Monthly games: `/gotm`, `/nr-gotm`, `/round`
 - GameDB: `/gamedb`, `/collection`, `/now-playing`, `/game-completion`
 - Members: `/profile`, `/mp-info`
 - Utilities: `/hltb`, `/activity-emoji`, `/remindme`, `/gamegiveaway`, `/avatar-history`

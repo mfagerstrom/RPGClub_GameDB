@@ -23,7 +23,6 @@ type HelpTopicId =
   | "nominate"
   | "round"
   | "round-history"
-  | "nextvote"
   | "hltb"
   | "now-playing"
   | "rss"
@@ -138,15 +137,6 @@ const HELP_TOPICS: HelpTopic[] = [
     notes:
       "Modal filters: category (GOTM/NR-GOTM/Both), optional title query, year, and sort order. " +
       "Results are paginated at 5 rounds per page.",
-  },
-  {
-    id: "nextvote",
-    label: "/nextvote",
-    summary: "Check when the next GOTM/NR-GOTM vote happens.",
-    syntax: "Syntax: /nextvote [showinchat:<boolean>]",
-    notes:
-      "Replies privately by default; set showinchat:true to post in channel. " +
-      "Nominate with /nominate.",
   },
   {
     id: "hltb",
@@ -317,7 +307,7 @@ const HELP_CATEGORIES: { id: string; name: string; topicIds: HelpTopicId[] }[] =
   {
     id: "monthly-games",
     name: "Monthly Games",
-    topicIds: ["nominate", "round", "round-history", "nextvote"],
+    topicIds: ["nominate", "round", "round-history"],
   },
   {
     id: "members",
@@ -870,7 +860,7 @@ export function buildMainHelpResponse(): {
         `${formatCommandLine("nominate", "Open the nomination modal for GOTM or NR-GOTM.")}\n` +
         `${formatCommandLine("round", "See the current round and winners.")}\n` +
         `${formatCommandLine("round-history", "Browse historical rounds with filters.")}\n` +
-        `${formatCommandLine("nextvote", "Check when the next vote happens.")}\n\n` +
+        "\n" +
         "**Members**\n" +
         `${formatCommandLine("profile", "View and edit member profiles.")}\n` +
         `${formatCommandLine("mp-info", "Find who has shared multiplayer info.")}\n\n` +
