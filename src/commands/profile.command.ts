@@ -109,12 +109,11 @@ function formatCompletionLine(
   record: Awaited<ReturnType<typeof Member.getCompletions>>[number],
   guildId?: string,
 ): string {
-  const playtime = formatPlaytimeHours(record.finalPlaytimeHours);
   const title =
     record.threadId && guildId
       ? `[${record.title}](https://discord.com/channels/${guildId}/${record.threadId})`
       : record.title;
-  return `${title}${playtime ? ` — ${playtime}` : ""}`;
+  return title;
 }
 
 export function formatTableDate(date: Date | null): string {
@@ -933,3 +932,4 @@ export class ProfileCommand {
 
 
 }
+
