@@ -51,11 +51,11 @@ import {
   type AnyRepliable,
 } from "../functions/InteractionUtils.js";
 import Game, { type IGame } from "../classes/Game.js";
-import { igdbService } from "../services/IgdbService.js";
+import { igdbService } from "../services/IGDB/IgdbService.js";
 import {
   createIgdbSession,
   type IgdbSelectOption,
-} from "../services/IgdbSelectService.js";
+} from "../services/IGDB/IgdbSelectService.js";
 import {
   announceCompletion,
   notifyUnknownCompletionPlatform,

@@ -98,11 +98,11 @@ import {
 import { saveCompletion } from "../functions/CompletionHelpers.js";
 import { formatGameTitleWithYear } from "../functions/GameTitleAutocompleteUtils.js";
 import { formatPlatformDisplayName } from "../functions/PlatformDisplay.js";
-import { igdbService, type IGDBGame } from "../services/IgdbService.js";
+import { igdbService, type IGDBGame } from "../services/IGDB/IgdbService.js";
 import {
   createIgdbSession,
   type IgdbSelectOption,
-} from "../services/IgdbSelectService.js";
+} from "../services/IGDB/IgdbSelectService.js";
 import { SteamApiError, steamApiService } from "../services/SteamApiService.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 import { COLLECTION_OVERVIEW_EMOJIS } from "../config/emojis.js";

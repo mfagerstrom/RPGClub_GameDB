@@ -69,11 +69,11 @@ import Game, { type IGame, type IRelease } from "../classes/Game.js";
 import { getHltbCacheByGameId, upsertHltbCache } from "../classes/HltbCache.js";
 import { getThreadsByGameId, setThreadGameLink, upsertThreadRecord } from "../classes/Thread.js";
 import axios from "axios"; // For downloading image attachments
-import { igdbService, type IGDBGame, type IGDBGameDetails } from "../services/IgdbService.js";
+import { igdbService, type IGDBGame, type IGDBGameDetails } from "../services/IGDB/IgdbService.js";
 import {
   createIgdbSession,
   type IgdbSelectOption,
-} from "../services/IgdbSelectService.js";
+} from "../services/IGDB/IgdbSelectService.js";
 import Member from "../classes/Member.js";
 import { NowPlayingCommand } from "./now-playing.command.js";
 import {

@@ -1,6 +1,6 @@
 import oracledb from "oracledb";
-import { getOraclePool } from "../db/oracleClient.js";
-import Game from "../classes/Game.js";
+import { getOraclePool } from "../../db/oracleClient.js";
+import Game from "../../classes/Game.js";
 import { igdbService } from "./IgdbService.js";
 
 type IgdbScanConfig = {

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import oracledb from "oracledb";
 import { initOraclePool, getOraclePool } from "../db/oracleClient.js";
-import { igdbService, type IGDBPlatform } from "../services/IgdbService.js";
+import { igdbService, type IGDBPlatform } from "../services/IGDB/IgdbService.js";
 
 type UpsertResult = "inserted" | "updated" | "unchanged";
 type WriteMode = "write" | "dry-run";

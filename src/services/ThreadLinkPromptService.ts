@@ -14,11 +14,11 @@ import {
   getThreadLinkInfo,
 } from "../classes/Thread.js";
 import Game from "../classes/Game.js";
-import { igdbService, type IGDBGameDetails } from "../services/IgdbService.js";
+import { igdbService, type IGDBGameDetails } from "./IGDB/IgdbService.js";
 import {
   createIgdbSession,
   type IgdbSelectOption,
-} from "./IgdbSelectService.js";
+} from "./IGDB/IgdbSelectService.js";
 import { NOW_PLAYING_FORUM_ID } from "../config/channels.js";
 import { NOW_PLAYING_SIDEGAME_TAG_ID } from "../config/tags.js";
 

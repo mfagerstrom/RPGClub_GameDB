@@ -2,7 +2,7 @@ import { EmbedBuilder } from "discord.js";
 import type { Client, TextBasedChannel } from "discord.js";
 import axios from "axios";
 import Game from "../classes/Game.js";
-import { igdbService } from "./IgdbService.js";
+import { igdbService } from "./IGDB/IgdbService.js";
 
 type AutoAcceptResult = {
   updated: number;

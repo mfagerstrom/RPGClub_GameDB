@@ -39,7 +39,7 @@ import { formatPlatformDisplayName } from "../../functions/PlatformDisplay.js";
 import { COMPLETIONATOR_MATCH_THUMBNAIL_NAME } from "./completion.types.js";
 import { safeReply } from "../../functions/InteractionUtils.js";
 import { buildComponentsV2Flags } from "../../functions/NominationListComponents.js";
-import { createIgdbSession } from "../../services/IgdbSelectService.js";
+import { createIgdbSession } from "../../services/IGDB/IgdbSelectService.js";
 import {
   buildImportMessageContainer,
   buildImportTextContainer,

@@ -1,7 +1,7 @@
 import oracledb from "oracledb";
 import axios from "axios";
 import { getOraclePool } from "../db/oracleClient.js";
-import { IGDBGameDetails, igdbService } from "../services/IgdbService.js";
+import { IGDBGameDetails, igdbService } from "../services/IGDB/IgdbService.js";
 import GameSearchSynonym from "./GameSearchSynonym.js";
 
 // Interfaces

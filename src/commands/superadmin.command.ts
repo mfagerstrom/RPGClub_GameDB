@@ -28,11 +28,11 @@ import Member, { type IMemberRecord } from "../classes/Member.js";
 import { getOraclePool } from "../db/oracleClient.js";
 import Game, { type IGame } from "../classes/Game.js";
 import { STANDARD_PLATFORM_IDS } from "../config/standardPlatforms.js";
-import { igdbService } from "../services/IgdbService.js";
+import { igdbService } from "../services/IGDB/IgdbService.js";
 import {
   createIgdbSession,
   type IgdbSelectOption,
-} from "../services/IgdbSelectService.js";
+} from "../services/IGDB/IgdbSelectService.js";
 import {
   COMPLETION_TYPES,
   type CompletionType,

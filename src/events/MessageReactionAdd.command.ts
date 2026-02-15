@@ -19,8 +19,8 @@ import { ButtonComponent, Discord, ModalComponent, On, SelectMenuComponent } fro
 import Game from "../classes/Game.js";
 import Member from "../classes/Member.js";
 import { COMPLETION_TYPES, type CompletionType } from "../commands/profile.command.js";
-import { createIgdbSession, type IgdbSelectOption } from "../services/IgdbSelectService.js";
-import { igdbService, type IGDBGameDetails } from "../services/IgdbService.js";
+import { createIgdbSession, type IgdbSelectOption } from "../services/IGDB/IgdbSelectService.js";
+import { igdbService, type IGDBGameDetails } from "../services/IGDB/IgdbService.js";
 import { stripModalInput } from "../functions/InteractionUtils.js";
 import { notifyUnknownCompletionPlatform } from "../functions/CompletionHelpers.js";
 import { COMPLETION_REACTION_DEV_CHANNEL_ID } from "../config/channels.js";

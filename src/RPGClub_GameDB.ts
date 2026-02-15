@@ -29,7 +29,7 @@ import { startThreadSyncService } from "./services/ThreadSyncService.js";
 import { startThreadLinkPromptService } from "./services/ThreadLinkPromptService.js";
 import { refreshGiveawayHubMessage } from "./services/GiveawayHubService.js";
 import { startGameReleaseAnnouncementService } from "./services/GameReleaseAnnouncementService.js";
-import { startIgdbScanService } from "./services/IgdbScanService.js";
+import { startIgdbScanService } from "./services/IGDB/IgdbScanService.js";
 import { tryHandleManagedRawModalInteraction } from "./services/raw-modal/RawModalInteractionRouter.js";
 installConsoleLogging();
 

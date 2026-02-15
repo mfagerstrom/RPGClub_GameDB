@@ -42,7 +42,7 @@ import GameSearchSynonymDraft, {
   type ISynonymDraftPair,
 } from "../classes/GameSearchSynonymDraft.js";
 import axios from "axios";
-import { igdbService } from "../services/IgdbService.js";
+import { igdbService } from "../services/IGDB/IgdbService.js";
 import { shouldRenderPrevNextButtons } from "../functions/PaginationUtils.js";
 
 const AUDIT_PAGE_SIZE = 20;
