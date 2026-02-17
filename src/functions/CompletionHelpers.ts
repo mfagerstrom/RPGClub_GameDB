@@ -1,9 +1,9 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  EmbedBuilder,
   MessageFlags,
   type ButtonInteraction,
   type CommandInteraction,
@@ -12,6 +12,12 @@ import {
   type StringSelectMenuInteraction,
 } from "discord.js";
 import {
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+} from "@discordjs/builders";
+import {
   type CompletionType,
   formatPlaytimeHours,
   formatTableDate,
@@ -19,8 +25,10 @@ import {
 import Game, { type IGame } from "../classes/Game.js";
 import Member from "../classes/Member.js";
 import { ANNOUNCEMENT_CHANNEL_ID, BOT_DEV_CHANNEL_ID } from "../config/channels.js";
+import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 
 const MAX_PLAYTIME_HOURS = 999999.99;
+const COMPLETION_COVER_ATTACHMENT_PREFIX = "completion-cover";
 
 export function validateCompletionPlaytimeInput(
   input: string,
@@ -195,24 +203,33 @@ export async function announceCompletion(
         `**${game.title}** - ${completionType} - ${dateStr}${hoursStr}` +
         yearlySummary;
     }
-
-    const embed = new EmbedBuilder()
-      .setAuthor({
-        name: user.displayName ?? user.username,
-        iconURL: user.displayAvatarURL(),
-      })
-      .setDescription(desc)
-      .setColor(0x00ff00);
-
+    const summaryLines = [
+      `### ${user.displayName ?? user.username}`,
+      desc,
+    ];
     if (isFirst) {
-      embed.addFields({
-        name: "First Completion!",
-        value: "This is the first recorded completion for this game in the club!",
-      });
+      summaryLines.push("This is the first recorded completion for this game in the club!");
     }
 
+    const summaryText = summaryLines.join("\n\n");
+    const container = new ContainerBuilder();
+    const section = new SectionBuilder().addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(summaryText),
+    );
+    const files: AttachmentBuilder[] = [];
+    if (game.imageData) {
+      const coverName = `${COMPLETION_COVER_ATTACHMENT_PREFIX}-${game.id}.png`;
+      files.push(new AttachmentBuilder(game.imageData, { name: coverName }));
+      section.setThumbnailAccessory(
+        new ThumbnailBuilder().setURL(`attachment://${coverName}`).setDescription(game.title),
+      );
+    }
+    container.addSectionComponents(section);
+
     await (channel as any).send({
-      embeds: [embed],
+      files,
+      components: [container],
+      flags: COMPONENTS_V2_FLAG,
     });
   } catch (err) {
     console.error("Failed to announce completion:", err);
