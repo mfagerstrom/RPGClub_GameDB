@@ -1319,6 +1319,63 @@ export default {
         };
       },
     },
+    "require-safe-v2-text-content": {
+      meta: {
+        type: "suggestion",
+        docs: {
+          description:
+            "Require dynamic TextDisplayBuilder.setContent values to be wrapped by safeV2TextContent.",
+        },
+        schema: [],
+        messages: {
+          wrapDynamicContent:
+            "Wrap dynamic TextDisplayBuilder.setContent(...) values with safeV2TextContent(value, maxLength).",
+        },
+      },
+      create(context) {
+        const isStaticStringValue = (node) => {
+          if (!node) return false;
+          if (node.type === "Literal" && typeof node.value === "string") {
+            return true;
+          }
+          if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
+            return true;
+          }
+          return false;
+        };
+
+        const isSafeWrapperCall = (node) => {
+          if (!node || node.type !== "CallExpression") return false;
+          return getCalledFunctionName(node.callee) === "safeV2TextContent";
+        };
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee.type !== "MemberExpression" ||
+              callee.property.type !== "Identifier" ||
+              callee.property.name !== "setContent"
+            ) {
+              return;
+            }
+
+            const rootBuilderName = getBuilderRootName(callee.object);
+            if (rootBuilderName !== "TextDisplayBuilder") return;
+
+            const [contentArg] = node.arguments;
+            if (!contentArg) return;
+            if (isStaticStringValue(contentArg)) return;
+            if (isSafeWrapperCall(contentArg)) return;
+
+            context.report({
+              node: contentArg,
+              messageId: "wrapDynamicContent",
+            });
+          },
+        };
+      },
+    },
     "no-components-v2-with-content": {
       meta: {
         type: "problem",

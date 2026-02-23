@@ -93,6 +93,7 @@ export default [
       "local/stable-custom-id": "error",
       "local/no-duplicate-literal-custom-id-in-block": "error",
       "local/components-v2-structure": "error",
+      "local/require-safe-v2-text-content": "warn",
       "local/no-components-v2-with-content": "error",
       "local/require-components-v2-flag-with-v2-components": "error",
       "local/dynamic-components-require-chunking": "error",

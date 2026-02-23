@@ -1988,22 +1988,29 @@ async function buildCollectionListResponse(params: {
   const components: Array<ContainerBuilder | ActionRowBuilder<any>> = [];
 
   const contentContainer = new ContainerBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`## ${headerTitle}`),
+    new TextDisplayBuilder().setContent(safeV2TextContent(`## ${headerTitle}`, 250)),
   );
   for (const entry of pageEntries) {
     const platform = entry.platformName ?? "Unknown platform";
     const noteLine = entry.note ? `\n> Note: ${entry.note}` : "";
+    const sectionText = safeV2TextContent(
+      `### ${entry.title}\n` +
+      `> Platform: ${platform}\n` +
+      `> Ownership: ${entry.ownershipType}\n` +
+      `> Added: ${formatTableDate(entry.createdAt)}${noteLine}`,
+      1000,
+    );
     const section = new SectionBuilder().addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `### ${entry.title}\n` +
-        `> Platform: ${platform}\n` +
-        `> Ownership: ${entry.ownershipType}\n` +
-        `> Added: ${formatTableDate(entry.createdAt)}${noteLine}`,
-      ),
+      new TextDisplayBuilder().setContent(sectionText),
     );
     const thumb = thumbnailsByGameId.get(entry.gameId);
     if (thumb) {
-      section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb));
+      try {
+        section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb));
+        section.toJSON();
+      } catch {
+        // Ignore invalid thumbnail payloads and keep text-only section rendering.
+      }
     }
     contentContainer.addSectionComponents(section);
   }
@@ -2012,7 +2019,7 @@ async function buildCollectionListResponse(params: {
     footerParts.push(`Filters: ${filtersText}`);
   }
   contentContainer.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`-# ${footerParts.join(" | ")}`),
+    new TextDisplayBuilder().setContent(safeV2TextContent(`-# ${footerParts.join(" | ")}`, 1000)),
   );
   components.push(contentContainer);
 
