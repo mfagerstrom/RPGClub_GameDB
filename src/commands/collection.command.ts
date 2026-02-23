@@ -1880,7 +1880,7 @@ function parseCollectionFiltersFromListMessage(message: any): {
 } {
   const textBlocks: string[] = [];
   collectTextDisplayContent(message?.components, textBlocks);
-  const filterBlock = textBlocks.find((value) => value.includes("**Filters**"));
+  const filterBlock = textBlocks.find((value) => value.includes("Filters:") || value.includes("**Filters**"));
   if (!filterBlock) {
     return {
       title: undefined,
