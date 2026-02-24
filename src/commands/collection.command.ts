@@ -1846,6 +1846,36 @@ function collectTextDisplayContent(components: any[] | undefined, output: string
   }
 }
 
+function logCollectionListNavDebug(event: string, details: Record<string, unknown>): void {
+  console.log("[CollectionListNavDebug]", event, JSON.stringify(details));
+}
+
+function validateComponentsForCollectionNavDebug(
+  components: Array<ContainerBuilder | ActionRowBuilder<any>>,
+  context: Record<string, unknown>,
+): void {
+  for (const [index, component] of components.entries()) {
+    try {
+      (component as any)?.toJSON?.();
+      logCollectionListNavDebug("component_valid", {
+        ...context,
+        componentIndex: index,
+        componentType: String((component as any)?.constructor?.name ?? "unknown"),
+      });
+    } catch (error) {
+      console.error(
+        "[CollectionListNavDebug] component_invalid",
+        JSON.stringify({
+          ...context,
+          componentIndex: index,
+          componentType: String((component as any)?.constructor?.name ?? "unknown"),
+          messages: flattenErrorMessages(error),
+        }),
+      );
+    }
+  }
+}
+
 function extractOverviewTitleFromMessage(message: any): string | null {
   const textBlocks: string[] = [];
   collectTextDisplayContent(message?.components, textBlocks);
@@ -1948,6 +1978,7 @@ async function buildCollectionListResponse(params: {
   ownershipType: CollectionOwnershipType | undefined;
   page: number;
   isEphemeral: boolean;
+  debugSource?: "nav";
 }): Promise<{
   components: Array<ContainerBuilder | ActionRowBuilder<any>>;
   content?: string;
@@ -1975,6 +2006,22 @@ async function buildCollectionListResponse(params: {
   const start = safePage * COLLECTION_LIST_PAGE_SIZE;
   const pageEntries = entries.slice(start, start + COLLECTION_LIST_PAGE_SIZE);
 
+  if (params.debugSource === "nav") {
+    logCollectionListNavDebug("build_response_start", {
+      viewerUserId: params.viewerUserId,
+      targetUserId: params.targetUserId,
+      requestedPage: params.page,
+      safePage,
+      pageCount,
+      total,
+      pageEntryCount: pageEntries.length,
+      titleFilter: params.title ?? null,
+      platformFilter: params.platform ?? null,
+      platformIdFilter: params.platformId ?? null,
+      ownershipFilter: params.ownershipType ?? null,
+    });
+  }
+
   const headerTitle = params.targetUserId === params.viewerUserId
     ? (params.isEphemeral ? "Your game collection" : `${params.memberLabel}'s Game Collection`)
     : `${params.memberLabel}'s Game Collection`;
@@ -1987,9 +2034,11 @@ async function buildCollectionListResponse(params: {
   const thumbnailsByGameId = await buildCollectionThumbnails(pageEntries);
   const components: Array<ContainerBuilder | ActionRowBuilder<any>> = [];
 
-  const contentContainer = new ContainerBuilder().addTextDisplayComponents(
+  const headerContainer = new ContainerBuilder().addTextDisplayComponents(
     new TextDisplayBuilder().setContent(safeV2TextContent(`## ${headerTitle}`, 250)),
   );
+  components.push(headerContainer);
+
   for (const entry of pageEntries) {
     const platform = entry.platformName ?? "Unknown platform";
     const noteLine = entry.note ? `\n> Note: ${entry.note}` : "";
@@ -2000,28 +2049,52 @@ async function buildCollectionListResponse(params: {
       `> Added: ${formatTableDate(entry.createdAt)}${noteLine}`,
       1000,
     );
+    if (params.debugSource === "nav") {
+      logCollectionListNavDebug("entry_section_payload", {
+        entryId: entry.entryId,
+        gameId: entry.gameId,
+        titleLength: entry.title.length,
+        noteLength: entry.note?.length ?? 0,
+        platformLength: (entry.platformName ?? "Unknown platform").length,
+        sectionTextLength: sectionText.length,
+      });
+    }
+    const thumb = thumbnailsByGameId.get(entry.gameId);
+    if (!thumb) {
+      const entryContainer = new ContainerBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(sectionText),
+      );
+      components.push(entryContainer);
+      continue;
+    }
+
     const section = new SectionBuilder().addTextDisplayComponents(
       new TextDisplayBuilder().setContent(sectionText),
     );
-    const thumb = thumbnailsByGameId.get(entry.gameId);
     if (thumb) {
       try {
         section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb));
         section.toJSON();
       } catch {
         // Ignore invalid thumbnail payloads and keep text-only section rendering.
+        const entryContainer = new ContainerBuilder().addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(sectionText),
+        );
+        components.push(entryContainer);
+        continue;
       }
     }
-    contentContainer.addSectionComponents(section);
+    const entryContainer = new ContainerBuilder().addSectionComponents(section);
+    components.push(entryContainer);
   }
   const footerParts = [`Page ${safePage + 1}/${pageCount}`, `${total} total entries`];
   if (filtersText) {
     footerParts.push(`Filters: ${filtersText}`);
   }
-  contentContainer.addTextDisplayComponents(
+  const footerContainer = new ContainerBuilder().addTextDisplayComponents(
     new TextDisplayBuilder().setContent(safeV2TextContent(`-# ${footerParts.join(" | ")}`, 1000)),
   );
-  components.push(contentContainer);
+  components.push(footerContainer);
 
   const row = new ActionRowBuilder<ButtonBuilder>();
   if (pageCount > 1) {
@@ -2070,7 +2143,35 @@ async function buildCollectionListResponse(params: {
   );
   components.push(row);
 
+  if (params.debugSource === "nav") {
+    validateComponentsForCollectionNavDebug(components, {
+      viewerUserId: params.viewerUserId,
+      targetUserId: params.targetUserId,
+      safePage,
+      pageCount,
+      total,
+    });
+  }
+
   return { components };
+}
+
+export async function buildCollectionListResponseForTests(params: {
+  viewerUserId: string;
+  targetUserId: string;
+  memberLabel: string;
+  title: string | undefined;
+  platform: string | undefined;
+  platformId: number | undefined;
+  platformLabel: string | undefined;
+  ownershipType: CollectionOwnershipType | undefined;
+  page: number;
+  isEphemeral: boolean;
+}): Promise<{
+  components: Array<ContainerBuilder | ActionRowBuilder<any>>;
+  content?: string;
+}> {
+  return buildCollectionListResponse(params);
 }
 
 async function applyFiltersToSourceMessage(params: {
@@ -4480,6 +4581,19 @@ export class CollectionCommand {
       ? parsed.page + 1
       : Math.max(parsed.page - 1, 0);
     const currentFilters = parseCollectionFiltersFromListMessage(interaction.message);
+    const debugContext = {
+      interactionId: interaction.id,
+      customId: interaction.customId,
+      viewerUserId: parsed.viewerUserId,
+      targetUserId: parsed.targetUserId,
+      currentPage: parsed.page,
+      nextPage,
+      direction: parsed.direction,
+      isEphemeral: parsed.isEphemeral,
+      currentFilters,
+      messageId: interaction.message.id,
+    };
+    logCollectionListNavDebug("nav_click", debugContext);
 
     const response = await buildCollectionListResponse({
       viewerUserId: parsed.viewerUserId,
@@ -4492,9 +4606,14 @@ export class CollectionCommand {
       ownershipType: currentFilters.ownershipType,
       page: nextPage,
       isEphemeral: parsed.isEphemeral,
+      debugSource: "nav",
     });
 
     if (response.content) {
+      logCollectionListNavDebug("nav_response_content_only", {
+        ...debugContext,
+        contentLength: response.content.length,
+      });
       await safeUpdate(interaction, {
         content: response.content,
         components: [],
@@ -4502,10 +4621,23 @@ export class CollectionCommand {
       return;
     }
 
-    await safeUpdate(interaction, {
-      components: response.components,
-      flags: buildComponentsV2Flags(parsed.isEphemeral),
-    });
+    validateComponentsForCollectionNavDebug(response.components, debugContext);
+    try {
+      await safeUpdate(interaction, {
+        components: response.components,
+        flags: buildComponentsV2Flags(parsed.isEphemeral),
+      });
+      logCollectionListNavDebug("nav_update_success", debugContext);
+    } catch (error) {
+      console.error(
+        "[CollectionListNavDebug] nav_update_failed",
+        JSON.stringify({
+          ...debugContext,
+          messages: flattenErrorMessages(error),
+        }),
+      );
+      throw error;
+    }
   }
 
   @ButtonComponent({
