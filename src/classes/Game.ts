@@ -2090,8 +2090,6 @@ export default class Game {
            AND (
              EXISTS (SELECT 1 FROM THREAD_GAME_LINKS tgl WHERE tgl.GAMEDB_GAME_ID = g.GAME_ID)
              OR EXISTS (SELECT 1 FROM THREADS th WHERE th.GAMEDB_GAME_ID = g.GAME_ID)
-             OR EXISTS (SELECT 1 FROM GOTM_ENTRIES ge WHERE ge.GAMEDB_GAME_ID = g.GAME_ID AND ge.THREAD_ID IS NOT NULL)
-             OR EXISTS (SELECT 1 FROM NR_GOTM_ENTRIES nge WHERE nge.GAMEDB_GAME_ID = g.GAME_ID AND nge.THREAD_ID IS NOT NULL)
            )
         `,
         binds,
@@ -2224,10 +2222,20 @@ export default class Game {
         REDDIT_URL: string | null;
         MONTH_YEAR: string;
       }>(
-        `SELECT ROUND_NUMBER, THREAD_ID, REDDIT_URL, MONTH_YEAR
-           FROM GOTM_ENTRIES
-          WHERE GAMEDB_GAME_ID = :gameId
-          ORDER BY ROUND_NUMBER`,
+        `SELECT ge.ROUND_NUMBER,
+                COALESCE(
+                  (SELECT MIN(tgl.THREAD_ID)
+                     FROM THREAD_GAME_LINKS tgl
+                    WHERE tgl.GAMEDB_GAME_ID = ge.GAMEDB_GAME_ID),
+                  (SELECT MIN(th.THREAD_ID)
+                     FROM THREADS th
+                    WHERE th.GAMEDB_GAME_ID = ge.GAMEDB_GAME_ID)
+                ) AS THREAD_ID,
+                ge.REDDIT_URL,
+                ge.MONTH_YEAR
+           FROM GOTM_ENTRIES ge
+          WHERE ge.GAMEDB_GAME_ID = :gameId
+          ORDER BY ge.ROUND_NUMBER`,
         { gameId },
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
@@ -2238,10 +2246,20 @@ export default class Game {
         REDDIT_URL: string | null;
         MONTH_YEAR: string;
       }>(
-        `SELECT ROUND_NUMBER, THREAD_ID, REDDIT_URL, MONTH_YEAR
-           FROM NR_GOTM_ENTRIES
-          WHERE GAMEDB_GAME_ID = :gameId
-          ORDER BY ROUND_NUMBER`,
+        `SELECT nge.ROUND_NUMBER,
+                COALESCE(
+                  (SELECT MIN(tgl.THREAD_ID)
+                     FROM THREAD_GAME_LINKS tgl
+                    WHERE tgl.GAMEDB_GAME_ID = nge.GAMEDB_GAME_ID),
+                  (SELECT MIN(th.THREAD_ID)
+                     FROM THREADS th
+                    WHERE th.GAMEDB_GAME_ID = nge.GAMEDB_GAME_ID)
+                ) AS THREAD_ID,
+                nge.REDDIT_URL,
+                nge.MONTH_YEAR
+           FROM NR_GOTM_ENTRIES nge
+          WHERE nge.GAMEDB_GAME_ID = :gameId
+          ORDER BY nge.ROUND_NUMBER`,
         { gameId },
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );

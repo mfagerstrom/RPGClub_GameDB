@@ -19,7 +19,7 @@ Oracle table listing Game of the Month entries and related metadata.
 | MONTH_YEAR | VARCHAR2(200) | No | — | Month/year label (e.g., "2024-09"). |
 | GAME_INDEX | NUMBER(3,0) | No | — | Position within the round; part of unique index. |
 | GAME_TITLE | VARCHAR2(1020) | No | — | Title of the selected game. |
-| THREAD_ID | VARCHAR2(200) | Yes | — | Discord thread id, if created. |
+| GAMEDB_GAME_ID | NUMBER | No | — | Foreign key to `GAMEDB.GAMEDB_GAME_ID`; thread links resolve via thread-link tables. |
 | REDDIT_URL | VARCHAR2(2048) | Yes | — | Link to Reddit post for the round. |
 | VOTING_RESULTS_MESSAGE_ID | VARCHAR2(200) | Yes | — | Discord message id with voting results. |
 | IMAGE_BLOB | BLOB | Yes | — | Stored image bytes for the game. |

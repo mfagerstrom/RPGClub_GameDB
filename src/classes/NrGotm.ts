@@ -1,6 +1,7 @@
 import oracledb from "oracledb";
 import { getOraclePool } from "../db/oracleClient.js";
 import Game from "./Game.js";
+import { getThreadsByGameId } from "./Thread.js";
 
 export interface INrGotmGame {
   id?: number | null;
@@ -49,6 +50,11 @@ async function getNrGameDetailsCached(gameId: number): Promise<{ title: string }
   return payload;
 }
 
+async function getPrimaryThreadIdForGame(gameId: number): Promise<string | null> {
+  const threadIds = await getThreadsByGameId(gameId);
+  return threadIds[0] ?? null;
+}
+
 async function loadFromDatabaseInternal(): Promise<INrGotmEntry[]> {
   const pool = getOraclePool();
   const connection = await pool.getConnection();
@@ -59,7 +65,6 @@ async function loadFromDatabaseInternal(): Promise<INrGotmEntry[]> {
       ROUND_NUMBER: number;
       MONTH_YEAR: string;
       GAME_INDEX: number;
-      THREAD_ID: string | null;
       REDDIT_URL: string | null;
       VOTING_RESULTS_MESSAGE_ID: string | null;
       GAMEDB_GAME_ID: number | null;
@@ -67,7 +72,6 @@ async function loadFromDatabaseInternal(): Promise<INrGotmEntry[]> {
       `SELECT ROUND_NUMBER,
               MONTH_YEAR,
               GAME_INDEX,
-              THREAD_ID,
               REDDIT_URL,
               VOTING_RESULTS_MESSAGE_ID,
               GAMEDB_GAME_ID
@@ -88,7 +92,6 @@ async function loadFromDatabaseInternal(): Promise<INrGotmEntry[]> {
         ROUND_NUMBER: number;
         MONTH_YEAR: string;
         GAME_INDEX: number;
-        THREAD_ID: string | null;
         REDDIT_URL: string | null;
         VOTING_RESULTS_MESSAGE_ID: string | null;
         GAMEDB_GAME_ID: number | null;
@@ -120,11 +123,12 @@ async function loadFromDatabaseInternal(): Promise<INrGotmEntry[]> {
         throw new Error(`NR-GOTM round ${round} game ${row.GAME_INDEX} is missing GAMEDB_GAME_ID.`);
       }
       const gameDetails = await getNrGameDetailsCached(gamedbGameId);
+      const derivedThreadId = await getPrimaryThreadIdForGame(gamedbGameId);
 
       const game: INrGotmGame = {
         id: Number(row.NR_GOTM_ID),
         title: gameDetails.title,
-        threadId: row.THREAD_ID ?? null,
+        threadId: derivedThreadId,
         redditUrl: row.REDDIT_URL ?? null,
         gamedbGameId,
       };
@@ -336,14 +340,14 @@ export default class NrGotm {
   }
 }
 
-export type NrGotmEditableField = "threadId" | "redditUrl" | "gamedbGameId";
+export type NrGotmDatabaseEditableField = "redditUrl" | "gamedbGameId";
 
 export async function updateNrGotmGameFieldInDatabase(
   opts: {
     rowId?: number | null;
     round?: number;
     gameIndex?: number;
-    field: NrGotmEditableField;
+    field: NrGotmDatabaseEditableField;
     value: string | number | null;
   },
 ): Promise<void> {
@@ -352,8 +356,7 @@ export async function updateNrGotmGameFieldInDatabase(
   const connection = await pool.getConnection();
 
   try {
-    const columnMap: Record<NrGotmEditableField, string> = {
-      threadId: "THREAD_ID",
+    const columnMap: Record<NrGotmDatabaseEditableField, string> = {
       redditUrl: "REDDIT_URL",
       gamedbGameId: "GAMEDB_GAME_ID",
     };
@@ -395,8 +398,7 @@ export async function updateNrGotmGameFieldInDatabase(
               g.gamedbGameId = newId;
               const meta = await getNrGameDetailsCached(newId);
               g.title = meta.title;
-            } else if (opts.field === "threadId") {
-              g.threadId = opts.value as string | null;
+              g.threadId = await getPrimaryThreadIdForGame(newId);
             } else if (opts.field === "redditUrl") {
               g.redditUrl = opts.value as string | null;
             }
@@ -469,8 +471,7 @@ export async function updateNrGotmGameFieldInDatabase(
         target.gamedbGameId = newId;
         const meta = await getNrGameDetailsCached(newId);
         target.title = meta.title;
-      } else if (opts.field === "threadId") {
-        target.threadId = opts.value as string | null;
+        target.threadId = await getPrimaryThreadIdForGame(newId);
       } else if (opts.field === "redditUrl") {
         target.redditUrl = opts.value as string | null;
       }
@@ -543,7 +544,6 @@ export async function insertNrGotmRoundInDatabase(
            ROUND_NUMBER,
            MONTH_YEAR,
            GAME_INDEX,
-           THREAD_ID,
            REDDIT_URL,
            VOTING_RESULTS_MESSAGE_ID,
            GAMEDB_GAME_ID
@@ -551,7 +551,6 @@ export async function insertNrGotmRoundInDatabase(
            :roundNumber,
            :monthYear,
            :gameIndex,
-           :threadId,
            :redditUrl,
            NULL,
            :gamedbGameId
@@ -561,7 +560,6 @@ export async function insertNrGotmRoundInDatabase(
           roundNumber: round,
           monthYear,
           gameIndex: i,
-          threadId: g.threadId ?? null,
           redditUrl: g.redditUrl ?? null,
           gamedbGameId: g.gamedbGameId,
           outId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },

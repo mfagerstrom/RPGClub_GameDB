@@ -5,10 +5,11 @@ import NrGotm, {
   type INrGotmEntry,
   type INrGotmGame,
   updateNrGotmGameFieldInDatabase,
-  type NrGotmEditableField,
+  type NrGotmDatabaseEditableField,
   insertNrGotmRoundInDatabase,
 } from "../../classes/NrGotm.js";
 import Game from "../../classes/Game.js";
+import { getThreadsByGameId } from "../../classes/Thread.js";
 import { buildNrGotmEntryEmbed } from "../../functions/GotmEntryEmbeds.js";
 import {
   promptUserForInput,
@@ -91,16 +92,7 @@ export async function handleAddNrGotm(interaction: CommandInteraction): Promise<
       return;
     }
 
-    const threadRaw = await promptUserForInput(
-      interaction,
-      `Enter the thread ID for NR-GOTM game #${n} (or type \`none\` / \`null\` to leave blank).`,
-    );
-    if (threadRaw === null) {
-      return;
-    }
-    const threadTrimmed = threadRaw.trim();
-    const threadId =
-      threadTrimmed && !/^none|null$/i.test(threadTrimmed) ? threadTrimmed : null;
+    const threadId = (await getThreadsByGameId(gamedbId))[0] ?? null;
 
     const redditRaw = await promptUserForInput(
       interaction,
@@ -216,7 +208,6 @@ export async function handleEditNrGotm(
     "Which field do you want to edit?",
     addCancelOption([
       { label: "GameDB", value: "gamedb", style: ButtonStyle.Primary },
-      { label: "Thread", value: "thread" },
       { label: "Reddit", value: "reddit" },
     ]),
   );
@@ -225,14 +216,11 @@ export async function handleEditNrGotm(
   }
 
   const fieldAnswer = fieldAnswerRaw.toLowerCase();
-  let field: NrGotmEditableField | null = null;
+  let field: NrGotmDatabaseEditableField | null = null;
   let nullableField = false;
 
   if (fieldAnswer === "gamedb") {
     field = "gamedbGameId";
-  } else if (fieldAnswer === "thread") {
-    field = "threadId";
-    nullableField = true;
   } else if (fieldAnswer === "reddit") {
     field = "redditUrl";
     nullableField = true;
@@ -287,8 +275,6 @@ export async function handleEditNrGotm(
     let updatedEntry: INrGotmEntry | null = null;
     if (field === "gamedbGameId") {
       updatedEntry = NrGotm.updateGamedbIdByRound(roundNumber, newValue as number, gameIndex);
-    } else if (field === "threadId") {
-      updatedEntry = NrGotm.updateThreadIdByRound(roundNumber, newValue as string | null, gameIndex);
     } else if (field === "redditUrl") {
       updatedEntry = NrGotm.updateRedditUrlByRound(roundNumber, newValue as string | null, gameIndex);
     }

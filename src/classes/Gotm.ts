@@ -1,6 +1,7 @@
 import oracledb from "oracledb";
 import { getOraclePool } from "../db/oracleClient.js";
 import Game from "./Game.js";
+import { getThreadsByGameId } from "./Thread.js";
 
 export interface IGotmGame {
   title: string;
@@ -48,6 +49,11 @@ async function getGameDetailsCached(gameId: number): Promise<{ title: string }> 
   return payload;
 }
 
+async function getPrimaryThreadIdForGame(gameId: number): Promise<string | null> {
+  const threadIds = await getThreadsByGameId(gameId);
+  return threadIds[0] ?? null;
+}
+
 async function loadFromDatabaseInternal(): Promise<IGotmEntry[]> {
   const pool = getOraclePool();
   const connection = await pool.getConnection();
@@ -57,7 +63,6 @@ async function loadFromDatabaseInternal(): Promise<IGotmEntry[]> {
       ROUND_NUMBER: number;
       MONTH_YEAR: string;
       GAME_INDEX: number;
-      THREAD_ID: string | null;
       REDDIT_URL: string | null;
       VOTING_RESULTS_MESSAGE_ID: string | null;
       GAMEDB_GAME_ID: number | null;
@@ -65,7 +70,6 @@ async function loadFromDatabaseInternal(): Promise<IGotmEntry[]> {
       `SELECT ROUND_NUMBER,
               MONTH_YEAR,
               GAME_INDEX,
-              THREAD_ID,
               REDDIT_URL,
               VOTING_RESULTS_MESSAGE_ID,
               GAMEDB_GAME_ID
@@ -85,7 +89,6 @@ async function loadFromDatabaseInternal(): Promise<IGotmEntry[]> {
         ROUND_NUMBER: number;
         MONTH_YEAR: string;
         GAME_INDEX: number;
-        THREAD_ID: string | null;
         REDDIT_URL: string | null;
         VOTING_RESULTS_MESSAGE_ID: string | null;
         GAMEDB_GAME_ID: number | null;
@@ -117,10 +120,11 @@ async function loadFromDatabaseInternal(): Promise<IGotmEntry[]> {
         throw new Error(`GOTM round ${round} game ${row.GAME_INDEX} is missing GAMEDB_GAME_ID.`);
       }
       const gameDetails = await getGameDetailsCached(gamedbGameId);
+      const derivedThreadId = await getPrimaryThreadIdForGame(gamedbGameId);
 
       const game: IGotmGame = {
         title: gameDetails.title,
-        threadId: row.THREAD_ID ?? null,
+        threadId: derivedThreadId,
         redditUrl: row.REDDIT_URL ?? null,
         gamedbGameId,
       };
@@ -328,12 +332,12 @@ export default class Gotm {
   }
 }
 
-export type GotmEditableField = "threadId" | "redditUrl" | "gamedbGameId";
+export type GotmDatabaseEditableField = "redditUrl" | "gamedbGameId";
 
 export async function updateGotmGameFieldInDatabase(
   round: number,
   gameIndex: number,
-  field: GotmEditableField,
+  field: GotmDatabaseEditableField,
   value: string | number | null,
 ): Promise<void> {
   ensureInitialized();
@@ -341,8 +345,7 @@ export async function updateGotmGameFieldInDatabase(
   const connection = await pool.getConnection();
 
   try {
-    const columnMap: Record<GotmEditableField, string> = {
-      threadId: "THREAD_ID",
+    const columnMap: Record<GotmDatabaseEditableField, string> = {
       redditUrl: "REDDIT_URL",
       gamedbGameId: "GAMEDB_GAME_ID",
     };
@@ -414,8 +417,7 @@ export async function updateGotmGameFieldInDatabase(
         target.gamedbGameId = newId;
         const meta = await getGameDetailsCached(newId);
         target.title = meta.title;
-      } else if (field === "threadId") {
-        target.threadId = value as string | null;
+        target.threadId = await getPrimaryThreadIdForGame(newId);
       } else if (field === "redditUrl") {
         target.redditUrl = value as string | null;
       }
@@ -487,7 +489,6 @@ export async function insertGotmRoundInDatabase(
            ROUND_NUMBER,
            MONTH_YEAR,
            GAME_INDEX,
-           THREAD_ID,
            REDDIT_URL,
            VOTING_RESULTS_MESSAGE_ID,
            GAMEDB_GAME_ID
@@ -495,7 +496,6 @@ export async function insertGotmRoundInDatabase(
            :round,
            :monthYear,
            :gameIndex,
-           :threadId,
            :redditUrl,
            NULL,
            :gamedbGameId
@@ -504,7 +504,6 @@ export async function insertGotmRoundInDatabase(
           round,
           monthYear,
           gameIndex: i,
-          threadId: g.threadId ?? null,
           redditUrl: g.redditUrl ?? null,
           gamedbGameId: g.gamedbGameId,
         },

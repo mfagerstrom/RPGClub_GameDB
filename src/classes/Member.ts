@@ -204,18 +204,6 @@ export default class Member {
                     SELECT MIN(th.THREAD_ID)
                     FROM THREADS th
                     WHERE th.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                  ),
-                  (
-                    SELECT MIN(ge.THREAD_ID)
-                    FROM GOTM_ENTRIES ge
-                    WHERE ge.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                      AND ge.THREAD_ID IS NOT NULL
-                  ),
-                  (
-                    SELECT MIN(nge.THREAD_ID)
-                    FROM NR_GOTM_ENTRIES nge
-                    WHERE nge.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                      AND nge.THREAD_ID IS NOT NULL
                   )
                 ) AS THREAD_ID,
                 u.NOTE,
@@ -293,18 +281,6 @@ export default class Member {
                     SELECT MIN(th.THREAD_ID)
                     FROM THREADS th
                     WHERE th.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                  ),
-                  (
-                    SELECT MIN(ge.THREAD_ID)
-                    FROM GOTM_ENTRIES ge
-                    WHERE ge.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                      AND ge.THREAD_ID IS NOT NULL
-                  ),
-                  (
-                    SELECT MIN(nge.THREAD_ID)
-                    FROM NR_GOTM_ENTRIES nge
-                    WHERE nge.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                      AND nge.THREAD_ID IS NOT NULL
                   )
                 ) AS THREAD_ID,
                 u.NOTE,

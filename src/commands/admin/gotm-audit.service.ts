@@ -14,6 +14,7 @@ import NrGotm, {
   insertNrGotmRoundInDatabase,
   updateNrGotmGameFieldInDatabase,
 } from "../../classes/NrGotm.js";
+import { setThreadGameLink } from "../../classes/Thread.js";
 import {
   createGotmAuditImportSession,
   countGotmAuditItems,
@@ -338,6 +339,12 @@ export async function tryInsertGotmAuditRound(
       NrGotm.addRound(item.roundNumber, monthYear, gamesWithIds);
     }
 
+    for (const game of games) {
+      if (game.threadId && Number.isInteger(game.gamedbGameId) && game.gamedbGameId > 0) {
+        await setThreadGameLink(game.threadId, game.gamedbGameId);
+      }
+    }
+
     await safeReply(interaction, {
       content:
         `${item.kind === "gotm" ? "GOTM" : "NR-GOTM"} round ${item.roundNumber} ` +
@@ -373,7 +380,7 @@ async function updateMissingGotmAuditLinks(
       if (!existingGame) continue;
 
       if (!existingGame.threadId && roundItem.threadId) {
-        await updateGotmGameFieldInDatabase(roundNumber, index, "threadId", roundItem.threadId);
+        await setThreadGameLink(roundItem.threadId, existingGame.gamedbGameId);
         Gotm.updateThreadIdByRound(roundNumber, roundItem.threadId, index);
         updated += 1;
       }
@@ -411,12 +418,7 @@ async function updateMissingGotmAuditLinks(
     if (!existingGame) continue;
 
     if (!existingGame.threadId && roundItem.threadId) {
-      await updateNrGotmGameFieldInDatabase({
-        round: roundNumber,
-        gameIndex: index,
-        field: "threadId",
-        value: roundItem.threadId,
-      });
+      await setThreadGameLink(roundItem.threadId, existingGame.gamedbGameId);
       NrGotm.updateThreadIdByRound(roundNumber, roundItem.threadId, index);
       updated += 1;
     }

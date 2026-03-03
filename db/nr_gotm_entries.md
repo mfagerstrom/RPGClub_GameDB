@@ -16,7 +16,7 @@ Oracle table listing Non-Retro Game of the Month entries and metadata.
 | MONTH_YEAR | VARCHAR2(50) | No | — | Month/year label. |
 | GAME_INDEX | NUMBER | No | — | Position within the round; part of unique index. |
 | GAME_TITLE | VARCHAR2(255) | No | — | Title of the selected game. |
-| THREAD_ID | VARCHAR2(50) | Yes | — | Discord thread id. |
+| GAMEDB_GAME_ID | NUMBER | No | — | Foreign key to `GAMEDB.GAMEDB_GAME_ID`; thread links resolve via thread-link tables. |
 | REDDIT_URL | VARCHAR2(500) | Yes | — | Reddit post link. |
 | VOTING_RESULTS_MESSAGE_ID | VARCHAR2(50) | Yes | — | Discord message id with results. |
 | NR_GOTM_ID | NUMBER | No | `"SYSTEM"."ISEQ$$_72464".nextval` | Primary key. |

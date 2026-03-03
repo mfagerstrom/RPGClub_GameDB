@@ -5,10 +5,11 @@ import Gotm, {
   type IGotmEntry,
   type IGotmGame,
   updateGotmGameFieldInDatabase,
-  type GotmEditableField,
+  type GotmDatabaseEditableField,
   insertGotmRoundInDatabase,
 } from "../../classes/Gotm.js";
 import Game from "../../classes/Game.js";
+import { getThreadsByGameId } from "../../classes/Thread.js";
 import { buildGotmEntryEmbed } from "../../functions/GotmEntryEmbeds.js";
 import {
   promptUserForInput,
@@ -91,16 +92,7 @@ export async function handleAddGotm(interaction: CommandInteraction): Promise<vo
       return;
     }
 
-    const threadRaw = await promptUserForInput(
-      interaction,
-      `Enter the thread ID for game #${n} (or type \`none\` / \`null\` to leave blank).`,
-    );
-    if (threadRaw === null) {
-      return;
-    }
-    const threadTrimmed = threadRaw.trim();
-    const threadId =
-      threadTrimmed && !/^none|null$/i.test(threadTrimmed) ? threadTrimmed : null;
+    const threadId = (await getThreadsByGameId(gamedbId))[0] ?? null;
 
     const redditRaw = await promptUserForInput(
       interaction,
@@ -215,7 +207,6 @@ export async function handleEditGotm(
     "Which field do you want to edit?",
     addCancelOption([
       { label: "GameDB", value: "gamedb", style: ButtonStyle.Primary },
-      { label: "Thread", value: "thread" },
       { label: "Reddit", value: "reddit" },
     ]),
   );
@@ -224,14 +215,11 @@ export async function handleEditGotm(
   }
 
   const fieldAnswer = fieldAnswerRaw.toLowerCase();
-  let field: GotmEditableField | null = null;
+  let field: GotmDatabaseEditableField | null = null;
   let nullableField = false;
 
   if (fieldAnswer === "gamedb") {
     field = "gamedbGameId";
-  } else if (fieldAnswer === "thread") {
-    field = "threadId";
-    nullableField = true;
   } else if (fieldAnswer === "reddit") {
     field = "redditUrl";
     nullableField = true;
@@ -280,8 +268,6 @@ export async function handleEditGotm(
     let updatedEntry: IGotmEntry | null = null;
     if (field === "gamedbGameId") {
       updatedEntry = Gotm.updateGamedbIdByRound(roundNumber, newValue as number, gameIndex);
-    } else if (field === "threadId") {
-      updatedEntry = Gotm.updateThreadIdByRound(roundNumber, newValue as string | null, gameIndex);
     } else if (field === "redditUrl") {
       updatedEntry = Gotm.updateRedditUrlByRound(roundNumber, newValue as string | null, gameIndex);
     }
