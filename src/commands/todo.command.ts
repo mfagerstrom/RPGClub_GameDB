@@ -2667,6 +2667,7 @@ export class TodoCommand {
       });
       return;
     }
+    const issueLabelSet = new Set(issue.labels.map((label) => label.toLowerCase()));
 
     const modal = new ModalBuilder()
       .setCustomId(
@@ -2717,7 +2718,7 @@ export class TodoCommand {
               TODO_CREATE_TYPE_LABELS.map((typeLabel) => ({
                 label: typeLabel,
                 value: typeLabel,
-                default: issue.labels.includes(typeLabel),
+                default: issueLabelSet.has(typeLabel.toLowerCase()),
               })),
             )),
     );
