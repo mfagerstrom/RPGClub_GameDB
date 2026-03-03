@@ -1930,6 +1930,101 @@ export class GameDb {
     await this.runSearchFlow(interaction, searchTerm);
   }
 
+  @Slash({ description: "Refresh release info from IGDB for a GameDB title", name: "refresh-release-info" })
+  async refreshReleaseInfo(
+    @SlashOption({
+      description: "GameDB title (autocomplete) or GameDB ID",
+      name: "title",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+      autocomplete: autocompleteGameDbViewTitle,
+    })
+    titleInput: string,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+
+    const searchTerm = sanitizeUserInput(titleInput, { preserveNewlines: false }).trim();
+    if (!searchTerm) {
+      await safeReply(interaction, {
+        content: "Please provide a GameDB title or GameDB ID.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    let game: IGame | null = null;
+    if (/^\d+$/.test(searchTerm)) {
+      const gameId = Number(searchTerm);
+      if (Number.isInteger(gameId) && gameId > 0) {
+        game = await Game.getGameById(gameId);
+      }
+    } else {
+      const matches = await Game.searchGames(searchTerm);
+      const exactMatches = matches.filter(
+        (entry) => entry.title.trim().toLowerCase() === searchTerm.toLowerCase(),
+      );
+      if (exactMatches.length === 1) {
+        game = exactMatches[0];
+      } else if (matches.length === 1) {
+        game = matches[0];
+      } else if (matches.length > 1) {
+        const preview = matches
+          .slice(0, 10)
+          .map((entry) => `- ${entry.title} (GameDB #${entry.id})`)
+          .join("\n");
+        await safeReply(interaction, {
+          content:
+            "Multiple GameDB titles matched that input. Please rerun and choose one from autocomplete " +
+            "or provide a GameDB ID.\n\n" +
+            preview,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+    }
+
+    if (!game) {
+      await safeReply(interaction, {
+        content: `No GameDB title found for "${searchTerm}".`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (!game.igdbId) {
+      await safeReply(interaction, {
+        content:
+          `GameDB #${game.id} (${game.title}) has no IGDB ID, so release data cannot be refreshed.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    try {
+      const before = await Game.getGameReleases(game.id);
+      await Game.importReleaseDatesFromIgdb(game.id, game.igdbId);
+      const after = await Game.getGameReleases(game.id);
+      const added = after.length - before.length;
+
+      const summary = added > 0
+        ? `Added ${added} release entr${added === 1 ? "y" : "ies"}.`
+        : "No additional release entries were found on IGDB.";
+
+      await safeReply(interaction, {
+        content:
+          `Release refresh complete for **${game.title}** (GameDB #${game.id}, IGDB #${game.igdbId}). ` +
+          `${summary} Current total releases: ${after.length}.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    } catch (err: any) {
+      await safeReply(interaction, {
+        content: `Failed to refresh release info: ${err?.message ?? String(err)}`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  }
+
   private async showGameProfile(
     interaction: CommandInteraction | StringSelectMenuInteraction,
     gameId: number,

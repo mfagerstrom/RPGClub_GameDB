@@ -99,6 +99,7 @@ type GameDbHelpTopicId =
   | "add"
   | "search"
   | "view"
+  | "refresh-release-info"
   | "audit"
   | "link-versions"
   | "synonym-list"
@@ -213,7 +214,7 @@ const HELP_TOPICS: HelpTopic[] = [
     summary:
       "Search, import, and view games from GameDB with IGDB-powered lookups.",
     syntax:
-      "Use /gamedb help for subcommands: add, search, view, audit, link-versions, " +
+      "Use /gamedb help for subcommands: add, search, view, refresh-release-info, audit, link-versions, " +
       "synonym-list, csv-import, help.",
     notes:
       "Imports pull titles/covers from IGDB. View shows GOTM/NR-GOTM wins, " +
@@ -778,6 +779,15 @@ const GAMEDB_HELP_TOPICS: GameDbHelpTopic[] = [
     notes:
       "Shows cover art, metadata, releases, plus GOTM/NR-GOTM associations: winning rounds " +
       "(with thread/Reddit links) and nomination rounds with nominator mentions.",
+  },
+  {
+    id: "refresh-release-info",
+    label: "/gamedb refresh-release-info",
+    summary: "Fetch additional missing release entries for one GameDB title from IGDB.",
+    syntax: "Syntax: /gamedb refresh-release-info title:<game>",
+    notes:
+      "Title autocompletes from GameDB. You can also pass a GameDB numeric ID. " +
+      "This adds release entries that are missing in GameDB, and does not replace existing release rows.",
   },
   {
     id: "audit",
