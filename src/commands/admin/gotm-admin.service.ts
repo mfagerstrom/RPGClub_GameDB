@@ -94,21 +94,10 @@ export async function handleAddGotm(interaction: CommandInteraction): Promise<vo
 
     const threadId = (await getThreadsByGameId(gamedbId))[0] ?? null;
 
-    const redditRaw = await promptUserForInput(
-      interaction,
-      `Enter the Reddit URL for game #${n} (or type \`none\` / \`null\` to leave blank).`,
-    );
-    if (redditRaw === null) {
-      return;
-    }
-    const redditTrimmed = redditRaw.trim();
-    const redditUrl =
-      redditTrimmed && !/^none|null$/i.test(redditTrimmed) ? redditTrimmed : null;
-
     games.push({
       title: gameMeta.title,
       threadId,
-      redditUrl,
+      redditUrl: null,
       gamedbGameId: gamedbId,
     });
   }
