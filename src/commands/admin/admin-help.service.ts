@@ -97,7 +97,7 @@ export const ADMIN_HELP_TOPICS: AdminHelpTopic[] = [
     label: "/admin set-nextvote",
     summary: "Set when the next GOTM/NR-GOTM vote will happen.",
     syntax: "Syntax: /admin set-nextvote date:<date>",
-    notes: "Votes are typically held the last Friday of the month.",
+    notes: "Votes are typically held the last Friday of the month. Date input is interpreted in America/New_York.",
   },
   {
     id: "voting-setup",

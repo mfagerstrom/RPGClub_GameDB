@@ -72,7 +72,19 @@ async function checkAndSendReminders(client: Client): Promise<void> {
   }
 
   const entry = current;
-  const voteTimeUtc = DateTime.fromJSDate(entry.nextVoteAt).toUTC();
+  const voteSourceUtc = DateTime.fromJSDate(entry.nextVoteAt, { zone: "utc" });
+  const voteDateEt = DateTime.fromObject(
+    {
+      year: voteSourceUtc.year,
+      month: voteSourceUtc.month,
+      day: voteSourceUtc.day,
+      hour: 12,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    },
+    { zone: REMINDER_ZONE },
+  );
   const nowUtc = DateTime.utc();
 
   for (const reminder of REMINDERS) {
@@ -80,8 +92,7 @@ async function checkAndSendReminders(client: Client): Promise<void> {
       continue;
     }
 
-    const reminderMomentUtc = voteTimeUtc
-      .setZone(REMINDER_ZONE)
+    const reminderMomentUtc = voteDateEt
       .minus({ days: reminder.daysBefore })
       .set({ hour: 17, minute: 0, second: 0, millisecond: 0 })
       .toUTC();
@@ -90,9 +101,7 @@ async function checkAndSendReminders(client: Client): Promise<void> {
       continue;
     }
 
-    const voteLabel = `${voteTimeUtc
-      .setZone(REMINDER_ZONE)
-      .toFormat("cccc, LLL dd")} (ET)`;
+    const voteLabel = `${voteDateEt.toFormat("cccc, LLL dd")} (ET)`;
 
     const content =
       `${reminder.description}! (${voteLabel})\n` +

@@ -24,6 +24,10 @@ import {
   safeUpdate,
   sanitizeUserInput,
 } from "../functions/InteractionUtils.js";
+import {
+  formatVoteDateForDisplay,
+  parseVoteDateInput,
+} from "../functions/VoteDateUtils.js";
 import { bot } from "../RPGClub_GameDB.js";
 import BotVotingInfo from "../classes/BotVotingInfo.js";
 import { isAdmin } from "./admin/admin-auth.utils.js";
@@ -103,8 +107,8 @@ export class Admin {
       return;
     }
 
-    const parsed = new Date(dateText);
-    if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) {
+    const parsed = parseVoteDateInput(dateText);
+    if (!parsed) {
       await safeReply(interaction, {
         content:
           "Invalid date format. Please use a recognizable date such as `YYYY-MM-DD`.",
@@ -128,7 +132,7 @@ export class Admin {
 
       await safeReply(interaction, {
         content:
-          `Next vote date updated to ${parsed.toLocaleDateString()}.`,
+          `Next vote date updated to ${formatVoteDateForDisplay(parsed)} (America/New_York).`,
       });
     } catch (err: any) {
       const msg = err?.message ?? String(err);

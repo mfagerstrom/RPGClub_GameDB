@@ -4,6 +4,7 @@ import { MessageFlags } from "discord.js";
 import { safeReply } from "../../functions/InteractionUtils.js";
 import { listNominationsForRound } from "../../classes/Nomination.js";
 import { getUpcomingNominationWindow } from "../../functions/NominationWindow.js";
+import { calculateNextVoteDateEt } from "../../functions/VoteDateUtils.js";
 import { ADMIN_CHANNEL_ID } from "../../config/channels.js";
 import { promptUserForInput } from "./admin-prompt.utils.js";
 import { VOTING_TITLE_MAX_LEN } from "./admin.types.js";
@@ -149,12 +150,5 @@ async function normalizeVotingTitles(
 }
 
 export function calculateNextVoteDate(): Date {
-  const now = new Date();
-  // Move to next month
-  const d = new Date(now.getFullYear(), now.getMonth() + 2, 0); // Last day of next month
-  // Back up to Friday (5)
-  while (d.getDay() !== 5) {
-    d.setDate(d.getDate() - 1);
-  }
-  return d;
+  return calculateNextVoteDateEt();
 }

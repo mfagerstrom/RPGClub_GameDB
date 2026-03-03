@@ -10,6 +10,10 @@ import NrGotm, { insertNrGotmRoundInDatabase } from "../../classes/NrGotm.js";
 import BotVotingInfo from "../../classes/BotVotingInfo.js";
 import { calculateNextVoteDate } from "./voting-admin.service.js";
 import {
+  formatVoteDateForDisplay,
+  parseVoteDateInput,
+} from "../../functions/VoteDateUtils.js";
+import {
   addCancelOption,
   buildChoiceRows,
 } from "./admin-prompt.utils.js";
@@ -204,7 +208,7 @@ export async function handleNextRoundSetup(
 
     // 5. Next Vote Date
     const defaultDate = calculateNextVoteDate();
-    const dateStr = defaultDate.toLocaleDateString("en-US");
+    const dateStr = formatVoteDateForDisplay(defaultDate);
 
     const dateChoice = await wizardChoice(
       `When should the *next* vote be? (Default: ${dateStr})`,
@@ -220,8 +224,8 @@ export async function handleNextRoundSetup(
     if (dateChoice === "date") {
       const dateResp = await wizardPrompt("Enter the next vote date (YYYY-MM-DD).");
       if (!dateResp) return;
-      const parsed = new Date(dateResp);
-      if (!Number.isNaN(parsed.getTime())) {
+      const parsed = parseVoteDateInput(dateResp);
+      if (parsed) {
         finalDate = parsed;
       } else {
         await wizardLog("Invalid date. Using default.");
@@ -229,7 +233,7 @@ export async function handleNextRoundSetup(
     }
 
     allActions.push({
-      description: `Set next vote date to ${finalDate.toLocaleDateString()}`,
+      description: `Set next vote date to ${formatVoteDateForDisplay(finalDate)} (America/New_York)`,
       execute: async () => {
         if (testMode) {
           await wizardLog("[Test] Would set round info.");
