@@ -1381,19 +1381,20 @@ export default {
         type: "problem",
         docs: {
           description:
-            "Enforce Components v2 content rules for reply/edit/update payloads.",
+            "Disallow content when Components v2 flags are present in reply/update payloads.",
         },
         schema: [],
         messages: {
-          nonNullContent:
-            "Do not include non-null content when using Components v2 flags.",
-          requireNullContent:
-            "When editing with Components v2 flags, include explicit content: null.",
+          noContentWithV2:
+            "Do not include content when using Components v2 flags.",
         },
       },
       create(context) {
-        const EDIT_METHODS = new Set(["editReply", "update", "safeUpdate"]);
-        const CREATE_METHODS = new Set(["reply", "safeReply", "send"]);
+        const CHECKED_METHODS = new Set(["reply", "update", "editReply", "safeReply", "safeUpdate"]);
+        const HELPER_PAYLOAD_ARG_INDEX = new Map([
+          ["safeReply", 1],
+          ["safeUpdate", 1],
+        ]);
 
         const isComponentsV2Flag = (node) => {
           if (!node) return false;
@@ -1439,9 +1440,6 @@ export default {
           return false;
         };
 
-        const isNullLiteral = (node) =>
-          Boolean(node && node.type === "Literal" && node.value === null);
-
         const checkObject = (node, methodName) => {
           if (!node || node.type !== "ObjectExpression") return;
           const flagsProp = getObjectPropertyValue(node, "flags");
@@ -1449,17 +1447,10 @@ export default {
           if (!expressionIncludesComponentsV2(flagsProp)) return;
 
           const contentProp = getObjectPropertyValue(node, "content");
-          const isEditMethod = EDIT_METHODS.has(methodName);
-          const isCreateMethod = CREATE_METHODS.has(methodName);
-          if (!isEditMethod && !isCreateMethod) return;
-
-          if (isEditMethod && !contentProp) {
-            context.report({ node, messageId: "requireNullContent" });
-            return;
-          }
-
-          if (contentProp && !isNullLiteral(contentProp)) {
-            context.report({ node: contentProp, messageId: "nonNullContent" });
+          if (!contentProp) return;
+          if (!CHECKED_METHODS.has(methodName)) return;
+          if (contentProp.type !== "Literal" || contentProp.value !== null) {
+            context.report({ node: contentProp, messageId: "noContentWithV2" });
           }
         };
 
@@ -1467,9 +1458,9 @@ export default {
           CallExpression(node) {
             const callee = node.callee;
             if (callee.type === "Identifier") {
-              if (!INTERACTION_RESPONSE_HELPERS.has(callee.name)) return;
-              if (!EDIT_METHODS.has(callee.name) && !CREATE_METHODS.has(callee.name)) return;
-              const arg = node.arguments[0];
+              if (!CHECKED_METHODS.has(callee.name)) return;
+              const argIndex = HELPER_PAYLOAD_ARG_INDEX.get(callee.name) ?? 0;
+              const arg = node.arguments[argIndex];
               checkObject(arg, callee.name);
               return;
             }
@@ -1478,11 +1469,8 @@ export default {
               const isInteractionMethod = Boolean(
                 methodName && INTERACTION_RESPONSE_METHODS.has(methodName),
               );
-              const isMessageSendMethod = Boolean(
-                methodName && MESSAGE_SEND_METHODS.has(methodName),
-              );
-              if (!methodName || (!isInteractionMethod && !isMessageSendMethod)) return;
-              if (!EDIT_METHODS.has(methodName) && !CREATE_METHODS.has(methodName)) return;
+              if (!methodName || !isInteractionMethod) return;
+              if (!CHECKED_METHODS.has(methodName)) return;
               const arg = node.arguments[0];
               checkObject(arg, methodName);
             }

@@ -1,10 +1,12 @@
 import { MessageFlags, MessageFlagsBitField } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder } from "@discordjs/builders";
 import type {
   CommandInteraction,
   InteractionDeferReplyOptions,
   RepliableInteraction,
 } from "discord.js";
 import { BOT_DEV_CHANNEL_ID } from "../config/channels.js";
+import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 
 export type AnyRepliable = RepliableInteraction | CommandInteraction;
 
@@ -128,10 +130,56 @@ function normalizeOptions(options: any): any {
   if ("ephemeral" in options) {
     const { ephemeral, flags, ...rest } = restOptions as any;
     const newFlags = ephemeral ? ((flags ?? 0) | MessageFlags.Ephemeral) : flags;
-    return { ...rest, flags: newFlags };
+    return normalizeComponentsV2Payload({ ...rest, flags: newFlags });
   }
 
-  return restOptions;
+  return normalizeComponentsV2Payload(restOptions);
+}
+
+function hasComponentsV2Flag(flags: unknown): boolean {
+  try {
+    const bitfield = new MessageFlagsBitField(flags as any).bitfield;
+    const asBigInt = typeof bitfield === "bigint" ? bitfield : BigInt(bitfield);
+    return (asBigInt & BigInt(COMPONENTS_V2_FLAG)) === BigInt(COMPONENTS_V2_FLAG);
+  } catch {
+    return false;
+  }
+}
+
+function normalizeComponentsV2Payload(options: any): any {
+  if (!options || typeof options !== "object") {
+    return options;
+  }
+
+  if (!hasComponentsV2Flag((options as { flags?: unknown }).flags)) {
+    return options;
+  }
+
+  if (!("content" in options)) {
+    return options;
+  }
+
+  const content = typeof options.content === "string"
+    ? options.content
+    : String(options.content ?? "");
+  const { components, ...rest } = options;
+  delete (rest as { content?: unknown }).content;
+
+  if (!content.length) {
+    return { ...rest, components };
+  }
+
+  const textContainer = new ContainerBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(content),
+  );
+  const mergedComponents = Array.isArray(components)
+    ? [textContainer, ...components]
+    : [textContainer];
+
+  return {
+    ...rest,
+    components: mergedComponents,
+  };
 }
 
 function stripEphemeralFlag(flags: any): number {
