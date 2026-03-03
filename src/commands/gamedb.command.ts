@@ -126,6 +126,11 @@ const GAMEDB_CSV_MANUAL_INPUT_ID = "gamedb-csv-manual-igdb-id";
 const GAMEDB_CSV_QUERY_PREFIX = "gamedb-csv-query";
 const GAMEDB_CSV_QUERY_INPUT_ID = "gamedb-csv-query-text";
 const GAMEDB_CSV_AUTO_ACCEPTED = new Map<number, string[]>();
+const GAMEDB_THREAD_MODAL_PREFIX = "gamedb-thread-modal";
+const GAMEDB_THREAD_TITLE_INPUT_ID = "gamedb-thread-title";
+const GAMEDB_THREAD_BODY_INPUT_ID = "gamedb-thread-body";
+const MAX_THREAD_TITLE_LEN = 100;
+const MAX_THREAD_BODY_LEN = 2000;
 
 type GameDbCsvAction = (typeof GAMEDB_CSV_ACTIONS)[number];
 
@@ -2864,14 +2869,83 @@ export class GameDb {
     }
 
     if (action === "thread") {
-      try {
-        await interaction.deferUpdate();
-      } catch {
-        // ignore
-      }
-      await this.runNowPlayingThreadWizard(interaction, gameId, game.title);
+      await this.showNowPlayingThreadModal(interaction, gameId, game.title);
       return;
     }
+  }
+
+  private buildDefaultNowPlayingThreadTitle(gameTitle: string): string {
+    return gameTitle.slice(0, MAX_THREAD_TITLE_LEN);
+  }
+
+  private buildDefaultNowPlayingThreadBody(memberDisplayName: string): string {
+    return `Now Playing thread created by ${memberDisplayName}.`;
+  }
+
+  private buildNowPlayingThreadModalCustomId(
+    gameId: number,
+    sourceChannelId: string,
+    sourceMessageId: string,
+  ): string {
+    return `${GAMEDB_THREAD_MODAL_PREFIX}:${gameId}:${sourceChannelId}:${sourceMessageId}`;
+  }
+
+  private async showNowPlayingThreadModal(
+    interaction: ButtonInteraction,
+    gameId: number,
+    gameTitle: string,
+  ): Promise<void> {
+    const sourceChannelId = interaction.channelId;
+    const sourceMessageId = interaction.message?.id;
+    if (!sourceChannelId || !sourceMessageId) {
+      await safeReply(interaction, {
+        content: "Unable to open thread modal from this message.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const memberDisplayName =
+      (interaction.member as any)?.displayName ?? interaction.user.username ?? "User";
+    const defaultTitle = this.buildDefaultNowPlayingThreadTitle(gameTitle);
+    const defaultBody = this.buildDefaultNowPlayingThreadBody(memberDisplayName);
+
+    const modal = new ModalBuilder()
+      .setCustomId(
+        this.buildNowPlayingThreadModalCustomId(
+          gameId,
+          sourceChannelId,
+          sourceMessageId,
+        ),
+      )
+      .setTitle("Create Now Playing Thread")
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId(GAMEDB_THREAD_TITLE_INPUT_ID)
+            .setLabel("Thread Title")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMaxLength(MAX_THREAD_TITLE_LEN)
+            .setValue(defaultTitle),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId(GAMEDB_THREAD_BODY_INPUT_ID)
+            .setLabel("Initial Post")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setMaxLength(MAX_THREAD_BODY_LEN)
+            .setValue(defaultBody),
+        ),
+      );
+
+    await interaction.showModal(modal).catch(async () => {
+      await safeReply(interaction, {
+        content: "Failed to open thread customization modal.",
+        flags: MessageFlags.Ephemeral,
+      });
+    });
   }
 
   private buildCompletionWizardContainer(
@@ -3408,16 +3482,88 @@ export class GameDb {
     }
   }
 
+  @ModalComponent({ id: /^gamedb-thread-modal:\d+:\d+:\d+$/ })
+  async handleGameDbThreadModal(interaction: ModalSubmitInteraction): Promise<void> {
+    const parts = interaction.customId.split(":");
+    const gameId = Number(parts[1]);
+    const sourceChannelId = parts[2] ?? "";
+    const sourceMessageId = parts[3] ?? "";
+
+    await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+
+    if (!Number.isInteger(gameId) || gameId <= 0 || !sourceChannelId || !sourceMessageId) {
+      await interaction.editReply({ content: "Invalid thread request payload." }).catch(() => {});
+      return;
+    }
+
+    const game = await Game.getGameById(gameId);
+    if (!game) {
+      await interaction.editReply({ content: "That game was not found in GameDB." }).catch(() => {});
+      return;
+    }
+
+    const memberDisplayName =
+      (interaction.member as any)?.displayName ?? interaction.user.username ?? "User";
+    const defaultTitle = this.buildDefaultNowPlayingThreadTitle(game.title);
+    const defaultBody = this.buildDefaultNowPlayingThreadBody(memberDisplayName);
+
+    const titleInput = stripModalInput(interaction.fields.getTextInputValue(GAMEDB_THREAD_TITLE_INPUT_ID));
+    const bodyInput = stripModalInput(interaction.fields.getTextInputValue(GAMEDB_THREAD_BODY_INPUT_ID));
+    const threadTitle = titleInput || defaultTitle;
+    const threadBody = bodyInput || defaultBody;
+
+    if (!threadTitle || threadTitle.length > MAX_THREAD_TITLE_LEN) {
+      await interaction.editReply({
+        content: `Thread title must be between 1 and ${MAX_THREAD_TITLE_LEN} characters.`,
+      }).catch(() => {});
+      return;
+    }
+    if (!threadBody || threadBody.length > MAX_THREAD_BODY_LEN) {
+      await interaction.editReply({
+        content: `Initial post must be between 1 and ${MAX_THREAD_BODY_LEN} characters.`,
+      }).catch(() => {});
+      return;
+    }
+
+    await this.runNowPlayingThreadWizard(
+      interaction,
+      gameId,
+      game.title,
+      {
+        threadTitle,
+        initialPost: threadBody,
+        sourceChannelId,
+        sourceMessageId,
+      },
+    );
+  }
+
   private async runNowPlayingThreadWizard(
-    interaction: ButtonInteraction,
+    interaction: ButtonInteraction | ModalSubmitInteraction,
     gameId: number,
     gameTitle: string,
+    options?: {
+      threadTitle?: string;
+      initialPost?: string;
+      sourceChannelId?: string;
+      sourceMessageId?: string;
+    },
   ): Promise<void> {
+    const isModalInteraction =
+      "isModalSubmit" in interaction &&
+      typeof interaction.isModalSubmit === "function" &&
+      interaction.isModalSubmit();
+    const sendStatus = async (content: string): Promise<void> => {
+      if (isModalInteraction && (interaction.deferred || interaction.replied)) {
+        await interaction.editReply({ content }).catch(() => {});
+        return;
+      }
+      await interaction.followUp({ content }).catch(() => {});
+    };
+
     const existingThreads = await getThreadsByGameId(gameId);
     if (existingThreads.length) {
-      await interaction.followUp({
-        content: "A thread is already linked to this game.",
-      });
+      await sendStatus("A thread is already linked to this game.");
       return;
     }
 
@@ -3425,22 +3571,21 @@ export class GameDb {
       NOW_PLAYING_FORUM_ID,
     )) as ForumChannel | null;
     if (!forum) {
-      await interaction.followUp({
-        content: "Now Playing forum channel was not found.",
-      });
+      await sendStatus("Now Playing forum channel was not found.");
       return;
     }
 
-    const threadTitle = gameTitle;
+    const threadTitle = options?.threadTitle ?? this.buildDefaultNowPlayingThreadTitle(gameTitle);
 
     const memberDisplayName =
       (interaction.member as any)?.displayName ?? interaction.user.username ?? "User";
+    const initialPost = options?.initialPost ?? this.buildDefaultNowPlayingThreadBody(memberDisplayName);
     const game = await Game.getGameById(gameId);
     const files = game?.imageData
       ? [new AttachmentBuilder(game.imageData, { name: `gamedb_${gameId}.png` })]
       : [];
     const messagePayload: MessageCreateOptions = {
-      content: `Now Playing thread created by ${memberDisplayName}.`,
+      content: initialPost,
       allowedMentions: { parse: [] as const },
     };
     if (files.length) {
@@ -3463,9 +3608,7 @@ export class GameDb {
         skipLinking: "Y",
       });
       await setThreadGameLink(thread.id, gameId);
-      await interaction.followUp({
-        content: `Created and linked <#${thread.id}>.`,
-      });
+      await sendStatus(`Created and linked <#${thread.id}>.`);
       const nowPlayingMembers = await Game.getNowPlayingMembers(gameId);
       const completions = await Game.getGameCompletions(gameId);
       const mentionIds = new Set<string>([interaction.user.id]);
@@ -3492,42 +3635,18 @@ export class GameDb {
         }
       }
 
-      const profile = await this.buildGameProfile(gameId, interaction);
-      if (profile) {
-        const actionRows = this.buildGameProfileActionRow(
+      const sourceChannelId = options?.sourceChannelId ?? interaction.channelId ?? "";
+      const sourceMessageId = options?.sourceMessageId ?? interaction.message?.id ?? "";
+      if (sourceChannelId && sourceMessageId) {
+        await this.updateGameProfileMessageById(
+          interaction,
+          sourceChannelId,
+          sourceMessageId,
           gameId,
-          profile.hasThread,
-          profile.featuredVideoUrl,
-          profile.canMarkThumbnailBad,
-          profile.isThumbnailBad,
-          profile.isThumbnailApproved,
-          profile.isReleased,
         );
-        const existingComponents = interaction.message?.components ?? [];
-        const updatedComponents = existingComponents.length
-          ? existingComponents.map((row) => {
-              if (!("components" in row)) return row;
-              const actionRowComponents = (row as ActionRow<MessageActionRowComponent>).components;
-              const hasGameDbAction = actionRowComponents.some((component) =>
-                component.customId?.startsWith("gamedb-action:"),
-              );
-              return hasGameDbAction ? actionRows[0] : row;
-            })
-          : [actionRows[0]];
-        if (actionRows.length > 1) {
-          updatedComponents.push(...actionRows.slice(1));
-        }
-        await interaction.editReply({
-          embeds: [],
-          files: profile.files,
-          components: updatedComponents,
-          flags: buildComponentsV2Flags(false),
-        }).catch(() => {});
       }
     } catch (err: any) {
-      await interaction.followUp({
-        content: `Failed to create thread: ${err?.message ?? String(err)}`,
-      });
+      await sendStatus(`Failed to create thread: ${err?.message ?? String(err)}`);
     }
   }
 

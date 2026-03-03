@@ -778,7 +778,8 @@ const GAMEDB_HELP_TOPICS: GameDbHelpTopic[] = [
     syntax: "Syntax: /gamedb view title:<string>",
     notes:
       "Shows cover art, metadata, releases, plus GOTM/NR-GOTM associations: winning rounds " +
-      "(with thread/Reddit links) and nomination rounds with nominator mentions.",
+      "(with thread/Reddit links) and nomination rounds with nominator mentions. " +
+      "Create Now Playing Thread opens a modal where you can edit the default thread title and initial post text.",
   },
   {
     id: "refresh-release-info",
