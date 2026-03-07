@@ -252,7 +252,7 @@ const HELP_TOPICS: HelpTopic[] = [
     id: "thread",
     label: "/thread",
     summary:
-      "Link or unlink a thread to one or more GameDB games (requires Manage Threads).",
+      "Link or unlink a thread to one or more GameDB games (requires the Regulars role).",
     syntax:
       "Syntax: /thread link thread_id:<string> gamedb_game_id:<int> | /thread unlink thread_id:<string> [gamedb_game_id:<int>]",
     notes:

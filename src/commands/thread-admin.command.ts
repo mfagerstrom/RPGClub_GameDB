@@ -2,14 +2,14 @@ import {
   ApplicationCommandOptionType,
   CommandInteraction,
   MessageFlags,
-  PermissionsBitField,
 } from "discord.js";
 import { Discord, Slash, SlashGroup, SlashOption } from "discordx";
 import { removeThreadGameLink, setThreadGameLink } from "../classes/Thread.js";
+import { REGULARS_ROLE_ID } from "../config/roles.js";
 import { safeReply, sanitizeUserInput } from "../functions/InteractionUtils.js";
 
 @Discord()
-@SlashGroup({ description: "Thread admin commands", name: "thread" })
+@SlashGroup({ description: "Thread commands", name: "thread" })
 @SlashGroup("thread")
 export class ThreadAdminCommands {
   @Slash({ description: "Link a thread to a GameDB game id", name: "link" })
@@ -31,9 +31,9 @@ export class ThreadAdminCommands {
     interaction: CommandInteraction,
   ): Promise<void> {
     threadId = sanitizeUserInput(threadId, { preserveNewlines: false });
-    if (!this.hasManageThreads(interaction)) {
+    if (!this.hasRegularsRole(interaction)) {
       await safeReply(interaction, {
-        content: "You need Manage Threads permission to use this.",
+        content: "Access denied. Command requires the Regulars role.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -65,9 +65,9 @@ export class ThreadAdminCommands {
     interaction: CommandInteraction,
   ): Promise<void> {
     threadId = sanitizeUserInput(threadId, { preserveNewlines: false });
-    if (!this.hasManageThreads(interaction)) {
+    if (!this.hasRegularsRole(interaction)) {
       await safeReply(interaction, {
-        content: "You need Manage Threads permission to use this.",
+        content: "Access denied. Command requires the Regulars role.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -82,9 +82,16 @@ export class ThreadAdminCommands {
     });
   }
 
-  private hasManageThreads(interaction: CommandInteraction): boolean {
+  private hasRegularsRole(interaction: CommandInteraction): boolean {
     const member = interaction.member;
-    if (!member || typeof member.permissions === "string") return false;
-    return member.permissions.has(PermissionsBitField.Flags.ManageThreads);
+    if (!member) return false;
+
+    const roleData = (member as any).roles;
+    if (Array.isArray(roleData)) {
+      return roleData.includes(REGULARS_ROLE_ID);
+    }
+
+    const roleCache = roleData?.cache;
+    return Boolean(roleCache?.has(REGULARS_ROLE_ID));
   }
 }

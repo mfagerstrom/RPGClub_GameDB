@@ -27,7 +27,8 @@ Use `/help` in Discord for full syntax and parameters. Major command groups incl
 - GameDB: `/gamedb`, `/collection`, `/now-playing`, `/game-completion`
 - Members: `/profile`, `/mp-info`
 - Utilities: `/hltb`, `/activity-emoji`, `/remindme`, `/gamegiveaway`, `/avatar-history`
-- Admin tools: `/mod`, `/admin`, `/superadmin`, `/todo`, `/publicreminder`, `/thread`, `/rss`, `/suggestion-review`
+- Admin tools: `/mod`, `/admin`, `/superadmin`, `/todo`, `/publicreminder`, `/rss`, `/suggestion-review`
+- Regulars tools: `/thread`
 
 ## Database Docs
 
