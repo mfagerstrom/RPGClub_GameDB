@@ -194,18 +194,7 @@ export default class Member {
                 u.PLATFORM_ID,
                 p.PLATFORM_NAME,
                 p.PLATFORM_ABBREVIATION,
-                COALESCE(
-                  (
-                    SELECT MIN(tgl.THREAD_ID)
-                    FROM THREAD_GAME_LINKS tgl
-                    WHERE tgl.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                  ),
-                  (
-                    SELECT MIN(th.THREAD_ID)
-                    FROM THREADS th
-                    WHERE th.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                  )
-                ) AS THREAD_ID,
+                g.LINKED_THREAD_ID AS THREAD_ID,
                 u.NOTE,
                 u.ADDED_AT,
                 u.NOTE_UPDATED_AT,
@@ -271,18 +260,7 @@ export default class Member {
                 u.PLATFORM_ID,
                 p.PLATFORM_NAME,
                 p.PLATFORM_ABBREVIATION,
-                COALESCE(
-                  (
-                    SELECT MIN(tgl.THREAD_ID)
-                    FROM THREAD_GAME_LINKS tgl
-                    WHERE tgl.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                  ),
-                  (
-                    SELECT MIN(th.THREAD_ID)
-                    FROM THREADS th
-                    WHERE th.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
-                  )
-                ) AS THREAD_ID,
+                g.LINKED_THREAD_ID AS THREAD_ID,
                 u.NOTE,
                 u.ADDED_AT,
                 u.NOTE_UPDATED_AT,
