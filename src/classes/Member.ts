@@ -128,6 +128,44 @@ export interface ICompletionRecord {
 
 type Connection = oracledb.Connection;
 const MAX_NOW_PLAYING = 10;
+const LEGACY_THREAD_ID_SQL = `COALESCE(
+                  (
+                    SELECT MIN(tgl.THREAD_ID)
+                    FROM THREAD_GAME_LINKS tgl
+                    WHERE tgl.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
+                  ),
+                  (
+                    SELECT MIN(th.THREAD_ID)
+                    FROM THREADS th
+                    WHERE th.GAMEDB_GAME_ID = u.GAMEDB_GAME_ID
+                  )
+                )`;
+let nowPlayingLinkedThreadColumnAvailable: boolean | null = null;
+
+async function getNowPlayingThreadIdSql(connection: Connection): Promise<string> {
+  if (nowPlayingLinkedThreadColumnAvailable === null) {
+    try {
+      const res = await connection.execute<{ CNT: number }>(
+        `SELECT COUNT(*) AS CNT
+           FROM ALL_TAB_COLUMNS
+          WHERE OWNER = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+            AND TABLE_NAME = 'GAMEDB_GAMES'
+            AND COLUMN_NAME = 'LINKED_THREAD_ID'`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+      nowPlayingLinkedThreadColumnAvailable = Number(res.rows?.[0]?.CNT ?? 0) > 0;
+    } catch (err) {
+      nowPlayingLinkedThreadColumnAvailable = false;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Member] Failed to detect LINKED_THREAD_ID column; using legacy links: ${msg}`);
+    }
+  }
+
+  return nowPlayingLinkedThreadColumnAvailable
+    ? "g.LINKED_THREAD_ID"
+    : LEGACY_THREAD_ID_SQL;
+}
 
 function buildParams(record: IMemberRecord) {
   return {
@@ -177,6 +215,7 @@ export default class Member {
   ): Promise<IMemberNowPlayingEntry[]> {
     const connection = await getOraclePool().getConnection();
     try {
+      const threadIdSql = await getNowPlayingThreadIdSql(connection);
       const res = await connection.execute<{
         GAME_ID: number;
         TITLE: string;
@@ -194,7 +233,7 @@ export default class Member {
                 u.PLATFORM_ID,
                 p.PLATFORM_NAME,
                 p.PLATFORM_ABBREVIATION,
-                g.LINKED_THREAD_ID AS THREAD_ID,
+                ${threadIdSql} AS THREAD_ID,
                 u.NOTE,
                 u.ADDED_AT,
                 u.NOTE_UPDATED_AT,
@@ -238,6 +277,7 @@ export default class Member {
   static async getAllNowPlaying(): Promise<IMemberNowPlayingList[]> {
     const connection = await getOraclePool().getConnection();
     try {
+      const threadIdSql = await getNowPlayingThreadIdSql(connection);
       const res = await connection.execute<{
         USER_ID: string;
         USERNAME: string | null;
@@ -260,7 +300,7 @@ export default class Member {
                 u.PLATFORM_ID,
                 p.PLATFORM_NAME,
                 p.PLATFORM_ABBREVIATION,
-                g.LINKED_THREAD_ID AS THREAD_ID,
+                ${threadIdSql} AS THREAD_ID,
                 u.NOTE,
                 u.ADDED_AT,
                 u.NOTE_UPDATED_AT,
