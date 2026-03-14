@@ -197,7 +197,7 @@ export class Admin {
     await handleAdminNominationDeleteSelectAction(interaction);
   }
 
-  @ModalComponent({ id: /^admin-nom-del-reason:[A-Za-z0-9_-]{1,64}$/ })
+  @ModalComponent({ id: /^admin-nom-del-reason:(gotm|nr-gotm):\d+:\d+$/ })
   async handleAdminNominationDeleteReasonModal(interaction: ModalSubmitInteraction): Promise<void> {
     const okToUseCommand: boolean = await isAdmin(interaction);
     if (!okToUseCommand) {

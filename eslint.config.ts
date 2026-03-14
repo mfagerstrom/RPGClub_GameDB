@@ -98,6 +98,7 @@ export default [
       "local/require-components-v2-flag-with-v2-components": "error",
       "local/dynamic-components-require-chunking": "error",
       "local/custom-id-has-matching-handler": "error",
+      "local/custom-id-builder-matches-handler": "error",
     },
   },
   {

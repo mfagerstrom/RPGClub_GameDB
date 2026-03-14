@@ -27,6 +27,7 @@ const INTERACTION_DECORATORS = new Set([
   "SelectMenuComponent",
   "ModalComponent",
 ]);
+const CUSTOM_ID_BUILDER_NAME_PATTERN = /^build.*CustomId$/;
 const SLASH_OPTION_DECORATOR = "SlashOption";
 const CHECKED_SET_CUSTOM_ID_BUILDERS = new Set([
   "ButtonBuilder",
@@ -398,6 +399,145 @@ function getCalledFunctionName(node) {
   if (node.type === "Identifier") return node.name;
   if (node.type === "MemberExpression" && node.property.type === "Identifier") {
     return node.property.name;
+  }
+  return null;
+}
+
+function dedupeStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
+}
+
+function combineStringSamples(left, right, maxResults = 12) {
+  const output = [];
+  for (const leftValue of left) {
+    for (const rightValue of right) {
+      output.push(`${leftValue}${rightValue}`);
+      if (output.length >= maxResults) {
+        return dedupeStrings(output);
+      }
+    }
+  }
+  return dedupeStrings(output);
+}
+
+function getFunctionParameterNames(node) {
+  if (!node?.params) return [];
+  return node.params
+    .map((param) => getIdentifierNameFromParam(param))
+    .filter((name) => typeof name === "string");
+}
+
+function getFunctionReturnExpression(node) {
+  if (!node) return null;
+  if (node.type === "ArrowFunctionExpression" && node.body.type !== "BlockStatement") {
+    return node.body;
+  }
+  const body = node.body?.body;
+  if (!Array.isArray(body)) return null;
+  for (const statement of body) {
+    if (statement.type === "ReturnStatement") {
+      return statement.argument ?? null;
+    }
+  }
+  return null;
+}
+
+function getFallbackSamplesForParam(paramName) {
+  if (!paramName) return ["x"];
+  if (/kind/i.test(paramName)) return ["gotm", "nr-gotm"];
+  if (/session/i.test(paramName)) return ["abc123_-"];
+  if (/reason/i.test(paramName)) return ["reason"];
+  if (/action/i.test(paramName)) return ["next"];
+  if (/type/i.test(paramName)) return ["type"];
+  if (/flow/i.test(paramName)) return ["create"];
+  if (/userid|memberid|ownerid|guildid|channelid|threadid|messageid/i.test(paramName)) {
+    return ["123456789012345678"];
+  }
+  if (/gameid|round|index|page|issueid|draftid|groupid|rowid/i.test(paramName)) {
+    return ["137"];
+  }
+  return ["x"];
+}
+
+function resolveCustomIdExpressionSamples(
+  node,
+  envMap,
+  functionMap,
+  constantMap,
+  depth = 0,
+) {
+  if (!node || depth > 4) return null;
+  if (node.type === "Literal") {
+    if (typeof node.value === "string") return [node.value];
+    if (typeof node.value === "number") return [String(node.value)];
+    return null;
+  }
+  if (node.type === "Identifier") {
+    const envValue = envMap.get(node.name);
+    if (envValue?.length) return envValue;
+    const constantValue = constantMap.get(node.name);
+    return typeof constantValue === "string" ? [constantValue] : null;
+  }
+  if (node.type === "TemplateLiteral") {
+    let current = [node.quasis[0]?.value?.cooked ?? node.quasis[0]?.value?.raw ?? ""];
+    for (let i = 0; i < node.expressions.length; i += 1) {
+      const exprSamples = resolveCustomIdExpressionSamples(
+        node.expressions[i],
+        envMap,
+        functionMap,
+        constantMap,
+        depth + 1,
+      );
+      if (!exprSamples?.length) return null;
+      const nextQuasi = node.quasis[i + 1]?.value?.cooked ?? node.quasis[i + 1]?.value?.raw ?? "";
+      current = combineStringSamples(current, exprSamples).map((value) => `${value}${nextQuasi}`);
+    }
+    return dedupeStrings(current);
+  }
+  if (node.type === "BinaryExpression" && node.operator === "+") {
+    const left = resolveCustomIdExpressionSamples(node.left, envMap, functionMap, constantMap, depth + 1);
+    const right = resolveCustomIdExpressionSamples(node.right, envMap, functionMap, constantMap, depth + 1);
+    if (!left?.length || !right?.length) return null;
+    return combineStringSamples(left, right);
+  }
+  if (node.type === "CallExpression" && node.callee.type === "Identifier") {
+    const functionMeta = functionMap.get(node.callee.name);
+    if (!functionMeta) return null;
+    const childEnv = new Map();
+    for (let i = 0; i < functionMeta.params.length; i += 1) {
+      const paramName = functionMeta.params[i];
+      const argNode = node.arguments[i];
+      const samples = resolveCustomIdExpressionSamples(
+        argNode,
+        envMap,
+        functionMap,
+        constantMap,
+        depth + 1,
+      ) ?? getFallbackSamplesForParam(paramName);
+      childEnv.set(paramName, samples);
+    }
+    return resolveCustomIdExpressionSamples(
+      functionMeta.returnNode,
+      childEnv,
+      functionMap,
+      constantMap,
+      depth + 1,
+    );
+  }
+  return null;
+}
+
+function compileRegexMatcher(node) {
+  if (
+    node?.type === "Literal" &&
+    node.regex &&
+    typeof node.regex.pattern === "string"
+  ) {
+    try {
+      return new RegExp(node.regex.pattern, node.regex.flags ?? "");
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -1800,6 +1940,172 @@ export default {
                 data: {
                   kind: call.kind,
                   prefix: call.prefix,
+                },
+              });
+            }
+          },
+        };
+      },
+    },
+    "custom-id-builder-matches-handler": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Require local build*CustomId helper outputs to match an in-file interaction handler id or regex.",
+        },
+        schema: [],
+        messages: {
+          mismatchedBuilder:
+            "Custom ID builder '{{builder}}' can produce '{{sample}}', which does not match any in-file {{kind}} handler id or regex.",
+        },
+      },
+      create(context) {
+        let constantMap = new Map();
+        const functionMap = new Map();
+        const handlerMatchersByKind = {
+          button: { exact: new Set(), regex: [] },
+          select: { exact: new Set(), regex: [] },
+          modal: { exact: new Set(), regex: [] },
+        };
+        const pendingCalls = [];
+
+        const addFunctionMeta = (name, node) => {
+          if (!name || !CUSTOM_ID_BUILDER_NAME_PATTERN.test(name)) return;
+          const returnNode = getFunctionReturnExpression(node);
+          if (!returnNode) return;
+          functionMap.set(name, {
+            params: getFunctionParameterNames(node),
+            returnNode,
+          });
+        };
+
+        const addHandlerMatcher = (kind, exactValue, regexValue) => {
+          if (!kind) return;
+          if (typeof exactValue === "string" && exactValue.length > 0) {
+            handlerMatchersByKind[kind].exact.add(exactValue);
+          }
+          if (regexValue) {
+            handlerMatchersByKind[kind].regex.push(regexValue);
+          }
+        };
+
+        const hasMatcherForKind = (kind) =>
+          handlerMatchersByKind[kind].exact.size > 0 || handlerMatchersByKind[kind].regex.length > 0;
+
+        const sampleMatchesHandler = (kind, sample) => {
+          if (handlerMatchersByKind[kind].exact.has(sample)) return true;
+          return handlerMatchersByKind[kind].regex.some((regex) => regex.test(sample));
+        };
+
+        return {
+          Program(node) {
+            constantMap = collectStaticStringConstants(node);
+            functionMap.clear();
+            handlerMatchersByKind.button.exact.clear();
+            handlerMatchersByKind.button.regex.length = 0;
+            handlerMatchersByKind.select.exact.clear();
+            handlerMatchersByKind.select.regex.length = 0;
+            handlerMatchersByKind.modal.exact.clear();
+            handlerMatchersByKind.modal.regex.length = 0;
+            pendingCalls.length = 0;
+
+            for (const statement of node.body) {
+              if (statement.type === "FunctionDeclaration" && statement.id?.type === "Identifier") {
+                addFunctionMeta(statement.id.name, statement);
+              }
+              if (statement.type !== "VariableDeclaration") continue;
+              for (const declarator of statement.declarations) {
+                if (
+                  declarator.type === "VariableDeclarator" &&
+                  declarator.id.type === "Identifier" &&
+                  declarator.init &&
+                  (declarator.init.type === "ArrowFunctionExpression" ||
+                    declarator.init.type === "FunctionExpression")
+                ) {
+                  addFunctionMeta(declarator.id.name, declarator.init);
+                }
+              }
+            }
+          },
+          Decorator(node) {
+            const decoratorExpression = node.expression;
+            const decoratorName = getDecoratorIdentifierName(decoratorExpression);
+            if (!decoratorName || !INTERACTION_DECORATORS.has(decoratorName)) return;
+            const kind = getDecoratorKind(decoratorName);
+            if (!kind) return;
+
+            const idValueNode = getDecoratorIdValueArg(decoratorExpression);
+            if (!idValueNode) return;
+
+            const literalId = getLiteralString(idValueNode);
+            if (literalId) {
+              addHandlerMatcher(kind, literalId, null);
+              return;
+            }
+
+            if (idValueNode.type === "Identifier") {
+              const resolved = constantMap.get(idValueNode.name) ?? null;
+              if (resolved) {
+                addHandlerMatcher(kind, resolved, null);
+              }
+              return;
+            }
+
+            const regexMatcher = compileRegexMatcher(idValueNode);
+            if (regexMatcher) {
+              addHandlerMatcher(kind, null, regexMatcher);
+            }
+          },
+          CallExpression(node) {
+            const callee = node.callee;
+            if (
+              callee.type !== "MemberExpression" ||
+              callee.property.type !== "Identifier" ||
+              callee.property.name !== "setCustomId"
+            ) {
+              return;
+            }
+
+            const rootBuilderName = getBuilderRootName(callee.object);
+            const kind = getInteractionKindForBuilder(rootBuilderName);
+            if (!kind) return;
+
+            const [customIdArg] = node.arguments;
+            if (
+              !customIdArg ||
+              customIdArg.type !== "CallExpression" ||
+              customIdArg.callee.type !== "Identifier" ||
+              !functionMap.has(customIdArg.callee.name)
+            ) {
+              return;
+            }
+
+            pendingCalls.push({
+              node: customIdArg,
+              kind,
+              builderName: customIdArg.callee.name,
+              samples: resolveCustomIdExpressionSamples(
+                customIdArg,
+                new Map(),
+                functionMap,
+                constantMap,
+              ) ?? [],
+            });
+          },
+          "Program:exit"() {
+            for (const call of pendingCalls) {
+              if (!call.samples.length) continue;
+              if (!hasMatcherForKind(call.kind)) continue;
+              const unmatchedSample = call.samples.find((sample) => !sampleMatchesHandler(call.kind, sample));
+              if (!unmatchedSample) continue;
+              context.report({
+                node: call.node,
+                messageId: "mismatchedBuilder",
+                data: {
+                  builder: call.builderName,
+                  sample: unmatchedSample,
+                  kind: call.kind,
                 },
               });
             }
