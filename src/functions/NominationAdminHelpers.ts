@@ -2,8 +2,8 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
-  MessageFlags,
+  ContainerBuilder,
+  TextDisplayBuilder,
   type ButtonInteraction,
   type RepliableInteraction,
   type TextBasedChannel,
@@ -20,6 +20,11 @@ import {
   type NominationKind,
 } from "../classes/Nomination.js";
 import {
+  buildComponentsV2Flags,
+  buildNominationListPayload,
+  type NominationListPayload,
+} from "./NominationListComponents.js";
+import {
   getUpcomingNominationWindow,
   type INominationWindow,
 } from "./NominationWindow.js";
@@ -29,60 +34,20 @@ export async function buildNominationDeleteView(
   kind: NominationKind,
   commandLabel: string,
   promptPrefix: string,
-): Promise<{ embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] } | null> {
+): Promise<{ payload: NominationListPayload; components: ActionRowBuilder<ButtonBuilder>[] } | null> {
   const window = await getUpcomingNominationWindow();
   const nominations = await listNominationsForRound(kind, window.targetRound);
   if (!nominations.length) return null;
 
-  const embed = buildNominationEmbed(
+  const payload = await buildNominationListPayload(
     kind === "gotm" ? "GOTM" : "NR-GOTM",
     commandLabel,
     window,
     nominations,
+    false,
   );
   const components = buildDeletionComponents(kind, window.targetRound, nominations, promptPrefix);
-  return { embed, components };
-}
-
-export function buildNominationDeleteViewEmbed(
-  kindLabel: string,
-  commandLabel: string,
-  targetRound: number,
-  window: INominationWindow,
-  nominations: INominationEntry[],
-): EmbedBuilder {
-  const windowWithRound: INominationWindow & { targetRound: number } = {
-    ...window,
-    targetRound,
-  };
-  return buildNominationEmbed(kindLabel, commandLabel, windowWithRound, nominations);
-}
-
-export function buildNominationEmbed(
-  kindLabel: string,
-  commandLabel: string,
-  window: INominationWindow & { targetRound: number },
-  nominations: INominationEntry[],
-): EmbedBuilder {
-  const lines =
-    nominations.length > 0
-      ? nominations.map((n, idx) => {
-          const reason = n.reason ? `\n> Reason: ${n.reason}` : "";
-          return `${numberEmoji(idx + 1)} ${n.gameTitle} — <@${n.userId}>${reason}`;
-        })
-      : ["No nominations yet."];
-
-  const voteLabel = formatDate(window.nextVoteAt);
-
-  return new EmbedBuilder()
-    .setColor(0x0099ff)
-    .setTitle(`${kindLabel} Nominations - Round ${window.targetRound}`)
-    .setDescription(lines.join("\n"))
-    .setFooter({
-      text:
-        `Vote on ${voteLabel}\n` +
-        `Do you want to nominate a game? Use ${commandLabel}`,
-    });
+  return { payload, components };
 }
 
 export function buildDeletionComponents(
@@ -122,10 +87,12 @@ export async function handleNominationDeletionButton(
   const nomination = await getNominationForUser(kind, round, userId);
   if (!nomination) {
     await safeUpdate(interaction, {
-      content: `No ${kind.toUpperCase()} nomination found for Round ${round} and user <@${userId}>.`,
-      components: [],
-      embeds: [],
-      flags: MessageFlags.Ephemeral,
+      components: [
+        buildNominationNoticeContainer(
+          `No ${kind.toUpperCase()} nomination found for Round ${round} and user <@${userId}>.`,
+        ),
+      ],
+      flags: buildComponentsV2Flags(true),
     });
     return;
   }
@@ -138,31 +105,31 @@ export async function handleNominationDeletionButton(
     targetRound: round,
   };
   const nominations = await listNominationsForRound(kind, round);
-  const embed = buildNominationEmbed(
+  const payload = await buildNominationListPayload(
     kind === "gotm" ? "GOTM" : "NR-GOTM",
-    `/${kind} nominate`,
+    "/nominate",
     windowForRound,
     nominations,
+    false,
   );
 
   const content = `<@${interaction.user.id}> deleted <@${userId}>'s nomination "${nomination.gameTitle}" for ${kind.toUpperCase()} Round ${round}.`;
   const components = buildDeletionComponents(kind, round, nominations, prefix);
 
   await safeUpdate(interaction, {
-    content,
-    embeds: [embed],
-    components,
-    flags: MessageFlags.Ephemeral,
+    components: [buildNominationNoticeContainer(content), ...payload.components, ...components],
+    files: payload.files,
+    flags: buildComponentsV2Flags(true),
   });
 
-  await announceNominationChange(kind, interaction, content, embed);
+  await announceNominationChange(kind, interaction, content, payload);
 }
 
 export async function announceNominationChange(
   kind: NominationKind,
   interaction: RepliableInteraction,
   content: string,
-  embed: EmbedBuilder,
+  payload: NominationListPayload,
 ): Promise<void> {
   const channelId =
     kind === "gotm" ? GOTM_NOMINATION_CHANNEL_ID : NR_GOTM_NOMINATION_CHANNEL_ID;
@@ -173,10 +140,21 @@ export async function announceNominationChange(
       ? (channel as TextBasedChannel)
       : null;
     if (!textChannel || !isSendableTextChannel(textChannel)) return;
-    await textChannel.send({ content, embeds: [embed] });
+    await textChannel.send({
+      components: [buildNominationNoticeContainer(content), ...payload.components],
+      files: payload.files,
+      flags: buildComponentsV2Flags(false),
+      allowedMentions: { parse: [] },
+    });
   } catch (err) {
     console.error(`Failed to announce nomination change in channel ${channelId}:`, err);
   }
+}
+
+function buildNominationNoticeContainer(content: string): ContainerBuilder {
+  return new ContainerBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(content),
+  );
 }
 
 function isSendableTextChannel(channel: TextBasedChannel | null): channel is TextBasedChannel & {
@@ -199,8 +177,4 @@ function numberEmoji(n: number): string {
     10: ":keycap_ten:",
   };
   return lookup[n] ?? `${n}.`;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", { timeZone: "America/New_York" });
 }

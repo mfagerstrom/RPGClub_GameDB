@@ -10,9 +10,12 @@ import { getUpcomingNominationWindow } from "../../functions/NominationWindow.js
 import {
   buildNominationDeleteView,
   handleNominationDeletionButton,
-  buildNominationDeleteViewEmbed,
   announceNominationChange,
 } from "../../functions/NominationAdminHelpers.js";
+import {
+  buildComponentsV2Flags,
+  buildNominationListPayload,
+} from "../../functions/NominationListComponents.js";
 
 export async function handleDeleteGotmNomination(
   interaction: CommandInteraction,
@@ -38,13 +41,22 @@ export async function handleDeleteGotmNomination(
 
     await deleteNominationForUser("gotm", targetRound, user.id);
     const nominations = await listNominationsForRound("gotm", targetRound);
-    const embed = buildNominationDeleteViewEmbed("GOTM", "/nominate", targetRound, window, nominations);
+    const payload = await buildNominationListPayload(
+      "GOTM",
+      "/nominate",
+      {
+        ...window,
+        targetRound,
+      },
+      nominations,
+      false,
+    );
     const adminName = interaction.user.tag ?? interaction.user.username ?? interaction.user.id;
     const content = `${adminName} deleted <@${user.id}>'s nomination "${nomination.gameTitle}" for GOTM Round ${targetRound}. Reason: ${reason}`;
 
     await interaction.deleteReply().catch(() => {});
 
-    await announceNominationChange("gotm", interaction as any, content, embed);
+    await announceNominationChange("gotm", interaction as any, content, payload);
   } catch (err: any) {
     const msg = err?.message ?? String(err);
     await safeReply(interaction, {
@@ -78,13 +90,22 @@ export async function handleDeleteNrGotmNomination(
 
     await deleteNominationForUser("nr-gotm", targetRound, user.id);
     const nominations = await listNominationsForRound("nr-gotm", targetRound);
-    const embed = buildNominationDeleteViewEmbed("NR-GOTM", "/nominate", targetRound, window, nominations);
+    const payload = await buildNominationListPayload(
+      "NR-GOTM",
+      "/nominate",
+      {
+        ...window,
+        targetRound,
+      },
+      nominations,
+      false,
+    );
     const adminName = interaction.user.tag ?? interaction.user.username ?? interaction.user.id;
     const content = `${adminName} deleted <@${user.id}>'s nomination "${nomination.gameTitle}" for NR-GOTM Round ${targetRound}. Reason: ${reason}`;
 
     await interaction.deleteReply().catch(() => {});
 
-    await announceNominationChange("nr-gotm", interaction as any, content, embed);
+    await announceNominationChange("nr-gotm", interaction as any, content, payload);
   } catch (err: any) {
     const msg = err?.message ?? String(err);
     await safeReply(interaction, {
@@ -107,9 +128,14 @@ export async function handleDeleteGotmNomsPanel(interaction: CommandInteraction)
 
   await safeReply(interaction, {
     content: `Select a GOTM nomination to delete for Round ${window.targetRound}.`,
-    embeds: [view.embed],
-    components: view.components,
-    flags: MessageFlags.Ephemeral,
+    components: view.components.length
+      ? [
+        ...view.payload.components,
+        ...view.components,
+      ]
+      : view.payload.components,
+    files: view.payload.files,
+    flags: buildComponentsV2Flags(true),
   });
 }
 
@@ -126,9 +152,14 @@ export async function handleDeleteNrGotmNomsPanel(interaction: CommandInteractio
 
   await safeReply(interaction, {
     content: `Select an NR-GOTM nomination to delete for Round ${window.targetRound}.`,
-    embeds: [view.embed],
-    components: view.components,
-    flags: MessageFlags.Ephemeral,
+    components: view.components.length
+      ? [
+        ...view.payload.components,
+        ...view.components,
+      ]
+      : view.payload.components,
+    files: view.payload.files,
+    flags: buildComponentsV2Flags(true),
   });
 }
 
