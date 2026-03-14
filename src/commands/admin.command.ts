@@ -6,7 +6,6 @@ import {
   StringSelectMenuInteraction,
   ModalSubmitInteraction,
   type CommandInteraction,
-  type User,
 } from "discord.js";
 import {
   ButtonComponent,
@@ -34,8 +33,6 @@ import { isAdmin } from "./admin/admin-auth.utils.js";
 import { ADMIN_HELP_TOPICS, buildAdminHelpEmbed, buildAdminHelpResponse } from "./admin/admin-help.service.js";
 import { handleVotingSetup } from "./admin/voting-admin.service.js";
 import {
-  handleDeleteGotmNomination,
-  handleDeleteNrGotmNomination,
   handleDeleteGotmNomsPanel,
   handleDeleteNrGotmNomsPanel,
   handleAdminNominationDeleteSelect as handleAdminNominationDeleteSelectAction,
@@ -143,60 +140,6 @@ export class Admin {
         flags: MessageFlags.Ephemeral,
       });
     }
-  }
-
-  @Slash({
-    description: "Delete any GOTM nomination for the upcoming round",
-    name: "delete-gotm-nomination",
-  })
-  async deleteGotmNomination(
-    @SlashOption({
-      description: "User whose nomination should be removed",
-      name: "user",
-      required: true,
-      type: ApplicationCommandOptionType.User,
-    })
-    user: User,
-    @SlashOption({
-      description: "Reason for deletion (required)",
-      name: "reason",
-      required: true,
-      type: ApplicationCommandOptionType.String,
-    })
-    reason: string,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await safeDeferReply(interaction);
-
-    const okToUseCommand: boolean = await isAdmin(interaction);
-    if (!okToUseCommand) {
-      return;
-    }
-
-    await handleDeleteGotmNomination(interaction, user, reason);
-  }
-
-  @Slash({
-    description: "Delete any NR-GOTM nomination for the upcoming round",
-    name: "delete-nr-gotm-nomination",
-  })
-  async deleteNrGotmNomination(
-    @SlashOption({
-      description: "User whose nomination should be removed",
-      name: "user",
-      required: true,
-      type: ApplicationCommandOptionType.User,
-    })
-    user: User,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    const okToUseCommand: boolean = await isAdmin(interaction);
-    if (!okToUseCommand) {
-      await safeReply(interaction, { content: "Access denied. Command requires Administrator role.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    await handleDeleteNrGotmNomination(interaction, user);
   }
 
   @Slash({

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Game from "../classes/Game.js";
-import { buildDeletionSelectControls } from "../functions/NominationAdminHelpers.js";
+import {
+  buildDeletionSelectControls,
+  parseDeletionReasonSessionRecord,
+} from "../functions/NominationAdminHelpers.js";
 import { buildNominationListPayload } from "../functions/NominationListComponents.js";
 
 const nominations = [
@@ -56,4 +59,31 @@ test("nomination delete admin view serializes with shared nomination list UI and
   } finally {
     (Game.getGameById as unknown) = originalGetGameById;
   }
+});
+
+test("reason session parser accepts matching persisted session state", () => {
+  const state = parseDeletionReasonSessionRecord({
+    sessionId: "abc123",
+    feature: "admin",
+    flow: "nomination-delete-reason",
+    ownerUserId: "user-1",
+    guildId: "guild-1",
+    channelId: "channel-1",
+    stateJson: JSON.stringify({
+      kind: "nr-gotm",
+      round: 140,
+      userId: "target-1",
+      gameTitle: "Example Game",
+    }),
+    status: "submitted",
+    expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    createdAt: new Date("2026-03-13T12:00:00.000Z"),
+    updatedAt: new Date("2026-03-13T12:01:00.000Z"),
+  }, "user-1");
+  assert.deepEqual(state, {
+    kind: "nr-gotm",
+    round: 140,
+    userId: "target-1",
+    gameTitle: "Example Game",
+  });
 });

@@ -3,18 +3,15 @@ import type {
   CommandInteraction,
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
-  User,
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { safeDeferReply, safeReply, sanitizeUserInput } from "../../functions/InteractionUtils.js";
 import {
-  deleteNominationForUser,
   getNominationForUser,
   listNominationsForRound,
 } from "../../classes/Nomination.js";
 import { getUpcomingNominationWindow } from "../../functions/NominationWindow.js";
 import {
-  announceNominationChange,
   buildDeletionReasonModal,
   buildDeletionSelectControls,
   buildDeletionConfirmationView,
@@ -32,94 +29,6 @@ import {
   buildComponentsV2Flags,
   buildNominationListPayload,
 } from "../../functions/NominationListComponents.js";
-
-export async function handleDeleteGotmNomination(
-  interaction: CommandInteraction,
-  user: User,
-  reason: string,
-): Promise<void> {
-  reason = sanitizeUserInput(reason, { preserveNewlines: true });
-
-  try {
-    const window = await getUpcomingNominationWindow();
-    const targetRound = window.targetRound;
-    const nomination = await getNominationForUser("gotm", targetRound, user.id);
-    const targetUser = await interaction.client.users.fetch(user.id).catch(() => user);
-    const targetName = targetUser?.tag ?? user.tag ?? user.username ?? user.id;
-
-    if (!nomination) {
-      await safeReply(interaction, {
-        content: `No GOTM nomination found for Round ${targetRound} by ${targetName}.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    await deleteNominationForUser("gotm", targetRound, user.id);
-    const nominations = await listNominationsForRound("gotm", targetRound);
-    const payload = await buildNominationListPayload(
-      "GOTM",
-      "/nominate",
-      {
-        ...window,
-        targetRound,
-      },
-      nominations,
-      false,
-    );
-    const adminName = interaction.user.tag ?? interaction.user.username ?? interaction.user.id;
-    const content = `${adminName} deleted <@${user.id}>'s nomination "${nomination.gameTitle}" for GOTM Round ${targetRound}. Reason: ${reason}`;
-
-    await interaction.deleteReply().catch(() => {});
-    await announceNominationChange("gotm", interaction as any, content, payload);
-  } catch (err: any) {
-    const msg = err?.message ?? String(err);
-    await safeReply(interaction, {
-      content: `Failed to delete nomination: ${msg}`,
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-}
-
-export async function handleDeleteNrGotmNomination(
-  interaction: CommandInteraction,
-  user: User,
-): Promise<void> {
-  try {
-    const window = await getUpcomingNominationWindow();
-    const targetRound = window.targetRound;
-    const nomination = await getNominationForUser("nr-gotm", targetRound, user.id);
-    const targetUser = await interaction.client.users.fetch(user.id).catch(() => user);
-    const targetName = targetUser?.tag ?? user.tag ?? user.username ?? user.id;
-
-    if (!nomination) {
-      await safeReply(interaction, {
-        content: `No NR-GOTM nomination found for Round ${targetRound} by ${targetName}.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const sessionId = await createDeletionReasonSession(interaction, {
-      kind: "nr-gotm",
-      round: targetRound,
-      userId: user.id,
-      gameTitle: nomination.gameTitle,
-    });
-    await interaction.showModal(buildDeletionReasonModal(sessionId, nomination.gameTitle)).catch(async () => {
-      await safeReply(interaction, {
-        content: "Unable to open the deletion reason prompt. Try again.",
-        flags: MessageFlags.Ephemeral,
-      });
-    });
-  } catch (err: any) {
-    const msg = err?.message ?? String(err);
-    await safeReply(interaction, {
-      content: `Failed to delete nomination: ${msg}`,
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-}
 
 export async function handleDeleteGotmNomsPanel(interaction: CommandInteraction): Promise<void> {
   const window = await getUpcomingNominationWindow();

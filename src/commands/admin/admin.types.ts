@@ -6,8 +6,6 @@ export type AdminHelpTopicId =
   | "add-nr-gotm"
   | "edit-nr-gotm"
   | "gotm-audit"
-  | "delete-gotm-nomination"
-  | "delete-nr-gotm-nomination"
   | "delete-gotm-noms"
   | "delete-nr-gotm-noms"
   | "set-nextvote"

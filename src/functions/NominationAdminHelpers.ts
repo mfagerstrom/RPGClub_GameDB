@@ -150,11 +150,21 @@ export async function readDeletionReasonSession(
   ownerUserId: string,
 ): Promise<PendingDeleteSelectionState | null> {
   const session = await getRawModalSessionRecord(sessionId);
-  if (!session || session.ownerUserId !== ownerUserId || session.status !== "open") {
+  if (!session || session.ownerUserId !== ownerUserId) {
     return null;
   }
   if (isRawModalSessionExpired(session)) {
     await updateRawModalSessionStatus({ sessionId, status: "expired" });
+    return null;
+  }
+  return parseDeletionReasonSessionRecord(session, ownerUserId);
+}
+
+export function parseDeletionReasonSessionRecord(
+  session: Awaited<ReturnType<typeof getRawModalSessionRecord>>,
+  ownerUserId: string,
+): PendingDeleteSelectionState | null {
+  if (!session || session.ownerUserId !== ownerUserId) {
     return null;
   }
 

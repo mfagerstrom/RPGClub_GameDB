@@ -65,20 +65,6 @@ export const ADMIN_HELP_TOPICS: AdminHelpTopic[] = [
       "round (required) — NR-GOTM round to edit. The bot shows current data and lets you pick what to change.",
   },
   {
-    id: "delete-gotm-nomination",
-    label: "/admin delete-gotm-nomination",
-    summary: "Remove a user's GOTM nomination for the upcoming round and announce it.",
-    syntax: "Syntax: /admin delete-gotm-nomination user:<user> reason:<string>",
-    notes: "Targets the upcoming nomination set. A public update is posted with the refreshed list.",
-  },
-  {
-    id: "delete-nr-gotm-nomination",
-    label: "/admin delete-nr-gotm-nomination",
-    summary: "Remove a user's NR-GOTM nomination for the upcoming round and announce it.",
-    syntax: "Syntax: /admin delete-nr-gotm-nomination user:<user>",
-    notes: "Targets the upcoming nomination set. The command opens a required reason prompt, then a final Delete Nomination confirmation step before the public update is posted.",
-  },
-  {
     id: "delete-gotm-noms",
     label: "/admin delete-gotm-noms",
     summary: "Interactive panel to delete GOTM nominations.",
