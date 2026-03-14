@@ -93,7 +93,6 @@ import { NOW_PLAYING_SIDEGAME_TAG_ID } from "../config/tags.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 import { STANDARD_PLATFORM_IDS } from "../config/standardPlatforms.js";
 import { padCommandName } from "./help.command.js";
-import { openNominationModal } from "./nominate.command.js";
 import {
   countGameDbCsvImportItems,
   createGameDbCsvImportSession,
@@ -2577,11 +2576,6 @@ export class GameDb {
     isReleased: boolean,
     disableVideo = false,
   ): ActionRowBuilder<ButtonBuilder>[] {
-    const nominateGame = new ButtonBuilder()
-      .setCustomId(`gamedb-action:nominate:${gameId}`)
-      .setLabel("Nominate")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(false);
     const addNowPlaying = new ButtonBuilder()
       .setCustomId(`gamedb-action:nowplaying:${gameId}`)
       .setLabel("Add to Now Playing List")
@@ -2592,8 +2586,7 @@ export class GameDb {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disableVideo);
     const rows: ActionRowBuilder<ButtonBuilder>[] = [];
-    const primaryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(nominateGame);
-    primaryRow.addComponents(addNowPlaying);
+    const primaryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(addNowPlaying);
     if (isReleased) {
       const addCompletion = new ButtonBuilder()
         .setCustomId(`gamedb-action:completion:${gameId}`)
@@ -2679,7 +2672,7 @@ export class GameDb {
     }).catch(() => {});
   }
 
-  @ButtonComponent({ id: /^gamedb-action:(nowplaying|nominate|completion|thread|video|hltb-import|bad-thumb|good-thumb):\d+$/ })
+  @ButtonComponent({ id: /^gamedb-action:(nowplaying|completion|thread|video|hltb-import|bad-thumb|good-thumb):\d+$/ })
   async handleGameDbAction(interaction: ButtonInteraction): Promise<void> {
     const [, action, gameIdRaw] = interaction.customId.split(":");
     const gameId = Number(gameIdRaw);
@@ -2847,19 +2840,6 @@ export class GameDb {
         }
       }
       await this.refreshGameProfileMessage(interaction, gameId);
-      return;
-    }
-
-    if (action === "nominate") {
-      await openNominationModal(interaction, {
-        prefilledTitle: game.title,
-      }).catch(async (error: unknown) => {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await safeReply(interaction, {
-          content: `Unable to open nomination form: ${errorMessage}`,
-          flags: MessageFlags.Ephemeral,
-        });
-      });
       return;
     }
 

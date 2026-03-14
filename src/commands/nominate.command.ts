@@ -1,17 +1,16 @@
 import type {
-  ButtonInteraction,
+  AutocompleteInteraction,
   CommandInteraction,
-  ModalSubmitInteraction,
   StringSelectMenuInteraction,
   TextBasedChannel,
 } from "discord.js";
-import { ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 import {
-  ComponentType as ApiComponentType,
-  TextInputStyle as ApiTextInputStyle,
-  type APIModalInteractionResponseCallbackComponent,
-} from "discord-api-types/v10";
-import { Discord, ModalComponent, Slash } from "discordx";
+  ApplicationCommandOptionType,
+  ContainerBuilder,
+  MessageFlags,
+  TextDisplayBuilder,
+} from "discord.js";
+import { Discord, SelectMenuComponent, Slash, SlashChoice, SlashOption } from "discordx";
 import type { NominationKind } from "../classes/Nomination.js";
 import {
   getNominationForUser,
@@ -23,220 +22,65 @@ import {
   buildComponentsV2Flags,
   buildNominationListPayload,
 } from "../functions/NominationListComponents.js";
+import { formatGameTitleWithYear, parseTitleWithYear } from "../functions/GameTitleAutocompleteUtils.js";
 import {
   areNominationsClosed,
   getUpcomingNominationWindow,
 } from "../functions/NominationWindow.js";
 import { safeDeferReply, safeReply, sanitizeUserInput } from "../functions/InteractionUtils.js";
 import { GOTM_NOMINATION_CHANNEL_ID, NR_GOTM_NOMINATION_CHANNEL_ID } from "../config/nominationChannels.js";
-import { RawModalApiService } from "../services/raw-modal/RawModalApiService.js";
-import { parseRawModalCustomId } from "../services/raw-modal/RawModalCustomId.js";
-import { SelectMenuComponent } from "discordx";
 import { GameDb } from "./gamedb.command.js";
 
-const NOMINATE_MODAL_TITLE = "Nominate a Game";
-const NOMINATE_CURRENT_NOMS_ID = "nominate-current";
-const NOMINATE_GAME_TITLE_ID = "nominate-title";
-const NOMINATE_TYPE_ID = "nominate-kind";
-const NOMINATE_REASON_ID = "nominate-reason";
 const NOMINATE_REASON_MAX_LENGTH = 250;
 
-function buildNominateSessionId(userId: string, roundNumber: number): string {
-  return `u${userId}_r${roundNumber}`;
-}
-
-function parseRoundFromSessionId(sessionId: string): number | null {
-  const match = /^u\d+_r(\d+)$/.exec(sessionId);
-  if (!match || !match[1]) {
-    return null;
+async function autocompleteNominationTitle(
+  interaction: AutocompleteInteraction,
+): Promise<void> {
+  const focused = interaction.options.getFocused(true);
+  const rawQuery = focused?.value ? String(focused.value) : "";
+  const query = sanitizeUserInput(rawQuery, { preserveNewlines: false }).trim();
+  if (!query) {
+    await interaction.respond([]);
+    return;
   }
-  const roundNumber = Number(match[1]);
-  return Number.isInteger(roundNumber) && roundNumber > 0 ? roundNumber : null;
+
+  const results = await Game.searchGamesAutocomplete(query);
+  await interaction.respond(
+    results.slice(0, 25).map((game) => ({
+      name: formatGameTitleWithYear(game).slice(0, 100),
+      value: formatGameTitleWithYear(game).slice(0, 100),
+    })),
+  );
 }
 
-function parseNominationKind(value: unknown): NominationKind | null {
+function parseNominationKind(value: string): NominationKind | null {
   if (value === "gotm" || value === "nr-gotm") {
     return value;
   }
   return null;
 }
 
-function extractNominationKindFromInteraction(
-  interaction: ModalSubmitInteraction,
-): NominationKind | null {
-  const topLevelComponents = (
-    interaction.components ?? []
-  ) as Array<{
-    type?: number;
-    component?: { customId?: string; value?: unknown };
-    components?: Array<{ customId?: string; value?: unknown }>;
-  }>;
-
-  for (const topLevel of topLevelComponents) {
-    if (!topLevel || typeof topLevel !== "object") {
-      continue;
-    }
-
-    const children = Array.isArray(topLevel.components)
-      ? topLevel.components
-      : topLevel.component
-        ? [topLevel.component]
-        : [];
-
-    for (const child of children) {
-      if (!child || child.customId !== NOMINATE_TYPE_ID) {
-        continue;
-      }
-      const parsed = parseNominationKind(child.value);
-      if (parsed) {
-        return parsed;
-      }
-    }
-  }
-
-  return null;
-}
-
-function formatCurrentNominationText(
-  roundNumber: number,
-  gotmNominationTitle?: string,
-  nrGotmNominationTitle?: string,
-): string {
-  const gotmLine = gotmNominationTitle
-    ? `GOTM: ${gotmNominationTitle}`
-    : "GOTM: (none yet)";
-  const nrGotmLine = nrGotmNominationTitle
-    ? `NR-GOTM: ${nrGotmNominationTitle}`
-    : "NR-GOTM: (none yet)";
-  return `Round ${roundNumber}\n${gotmLine}\n${nrGotmLine}`;
-}
-
-function buildNominateModalComponents(
-  currentNominationText: string,
-  prefilledTitle?: string,
-): APIModalInteractionResponseCallbackComponent[] {
-  const titleValue = prefilledTitle
-    ? sanitizeUserInput(prefilledTitle, {
-      preserveNewlines: false,
-      maxLength: 256,
-    })
-    : undefined;
-
-  return [
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: NOMINATE_CURRENT_NOMS_ID,
-          label: "Your current nominations",
-          style: ApiTextInputStyle.Paragraph,
-          required: false,
-          max_length: 600,
-          value: currentNominationText,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: NOMINATE_GAME_TITLE_ID,
-          label: "Game title",
-          style: ApiTextInputStyle.Short,
-          required: true,
-          max_length: 256,
-          value: titleValue,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.Label,
-      label: "Nomination type",
-      description: "Choose one",
-      component: {
-        type: ApiComponentType.RadioGroup,
-        custom_id: NOMINATE_TYPE_ID,
-        required: true,
-        options: [
-          {
-            label: "GOTM",
-            value: "gotm",
-            description: "Game of the Month nomination",
-          },
-          {
-            label: "NR-GOTM",
-            value: "nr-gotm",
-            description: "Non-RPG Game of the Month nomination",
-          },
-        ],
-      },
-    },
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: NOMINATE_REASON_ID,
-          label: "Reason",
-          style: ApiTextInputStyle.Paragraph,
-          required: true,
-          max_length: NOMINATE_REASON_MAX_LENGTH,
-        },
-      ],
-    },
-  ];
-}
-
-export async function openNominationModal(
-  interaction: CommandInteraction | ButtonInteraction,
-  options?: { prefilledTitle?: string },
-): Promise<void> {
-  const modalApi = new RawModalApiService({
-    applicationId: interaction.applicationId,
-  });
-
-  const window = await getUpcomingNominationWindow();
-  if (areNominationsClosed(window)) {
-    await safeReply(interaction, {
-      content:
-        `Nominations for Round ${window.targetRound} are closed. ` +
-        `Voting is scheduled for ${window.nextVoteAt.toLocaleString()}.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const [gotmNomination, nrGotmNomination] = await Promise.all([
-    getNominationForUser("gotm", window.targetRound, interaction.user.id),
-    getNominationForUser("nr-gotm", window.targetRound, interaction.user.id),
-  ]);
-
-  const currentNominationText = formatCurrentNominationText(
-    window.targetRound,
-    gotmNomination?.gameTitle,
-    nrGotmNomination?.gameTitle,
-  );
-  const sessionId = buildNominateSessionId(interaction.user.id, window.targetRound);
-
-  await modalApi.openModal({
-    interactionId: interaction.id,
-    interactionToken: interaction.token,
-    feature: "nominate",
-    flow: "create",
-    sessionId,
-    title: NOMINATE_MODAL_TITLE,
-    components: buildNominateModalComponents(
-      currentNominationText,
-      options?.prefilledTitle,
-    ),
-  });
-}
-
 async function resolveNominatedGameByTitle(searchTerm: string): Promise<IGame | null> {
-  const existing = await Game.searchGames(searchTerm);
-  const exact = existing.find((game) => game.title.toLowerCase() === searchTerm.toLowerCase());
+  const parsed = parseTitleWithYear(searchTerm);
+  const normalizedSearchTerm = parsed.title;
+  const existing = await Game.searchGames(normalizedSearchTerm);
+  const exact = existing.find((game) => {
+    if (game.title.toLowerCase() !== normalizedSearchTerm.toLowerCase()) {
+      return false;
+    }
+    if (parsed.year == null) {
+      return true;
+    }
+
+    const releaseDate = game.initialReleaseDate instanceof Date
+      ? game.initialReleaseDate
+      : game.initialReleaseDate
+        ? new Date(game.initialReleaseDate)
+        : null;
+    return releaseDate instanceof Date && !Number.isNaN(releaseDate.getTime())
+      ? releaseDate.getFullYear() === parsed.year
+      : false;
+  });
   if (exact) {
     return exact;
   }
@@ -247,7 +91,7 @@ async function resolveNominatedGameByTitle(searchTerm: string): Promise<IGame | 
 }
 
 async function announceNominationList(
-  interaction: ModalSubmitInteraction,
+  interaction: CommandInteraction,
   kind: NominationKind,
   nominatorUserId: string,
   nominatedTitle: string,
@@ -291,38 +135,42 @@ function isSendableTextChannel(channel: TextBasedChannel | null): channel is Sen
 
 @Discord()
 export class NominateCommand {
-  @Slash({ description: "Open nomination form for GOTM or NR-GOTM", name: "nominate" })
-  async nominate(interaction: CommandInteraction): Promise<void> {
-    try {
-      await openNominationModal(interaction);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      await safeReply(interaction, {
-        content: `Unable to open nomination form: ${errorMessage}`,
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-  }
-
-  @ModalComponent({ id: /^modal:nominate:v1:create:[A-Za-z0-9_-]{1,64}$/ })
-  async submitNominateModal(interaction: ModalSubmitInteraction): Promise<void> {
-    const parsedCustomId = parseRawModalCustomId(interaction.customId);
-    const selectedKind = extractNominationKindFromInteraction(interaction);
-    const rawTitle = interaction.fields.getTextInputValue(NOMINATE_GAME_TITLE_ID);
-    const rawReason = interaction.fields.getTextInputValue(NOMINATE_REASON_ID);
-    const cleanedTitle = sanitizeUserInput(rawTitle, { preserveNewlines: false });
+  @Slash({ description: "Nominate a GameDB title for GOTM or NR-GOTM", name: "nominate" })
+  async nominate(
+    @SlashOption({
+      autocomplete: autocompleteNominationTitle,
+      description: "Game title (autocomplete from GameDB)",
+      name: "title",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+    })
+    rawTitle: string,
+    @SlashChoice(
+      { name: "GOTM", value: "gotm" },
+      { name: "NR-GOTM", value: "nr-gotm" },
+    )
+    @SlashOption({
+      description: "Nomination type",
+      name: "type",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+    })
+    rawKind: string,
+    @SlashOption({
+      description: "Reason for your nomination",
+      name: "reason",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+    })
+    rawReason: string,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    const cleanedTitle = sanitizeUserInput(rawTitle, { preserveNewlines: false, maxLength: 256 });
     const cleanedReason = sanitizeUserInput(rawReason, {
       preserveNewlines: true,
       maxLength: NOMINATE_REASON_MAX_LENGTH,
     });
-
-    if (!parsedCustomId || parsedCustomId.feature !== "nominate" || parsedCustomId.flow !== "create") {
-      await safeReply(interaction, {
-        content: "This nomination form is invalid. Please run /nominate again.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+    const selectedKind = parseNominationKind(rawKind);
 
     if (!cleanedTitle) {
       await safeReply(interaction, {
@@ -362,23 +210,12 @@ export class NominateCommand {
         return;
       }
 
-      const expectedRound = parseRoundFromSessionId(parsedCustomId.sessionId);
-      if (!expectedRound || expectedRound !== window.targetRound) {
-        await safeReply(interaction, {
-          content:
-            `This form is no longer current for Round ${window.targetRound}. ` +
-            "Please run /nominate again.",
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-
       const game = await resolveNominatedGameByTitle(cleanedTitle);
       if (!game) {
         await safeReply(interaction, {
           content:
             `I could not find a unique GameDB match for "${cleanedTitle}". ` +
-            "Please use /gamedb search or /gamedb add first, then try /nominate again.",
+            "Please use the title autocomplete or add the game to GameDB first.",
           flags: MessageFlags.Ephemeral,
         });
         return;

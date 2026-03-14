@@ -118,10 +118,12 @@ const HELP_TOPICS: HelpTopic[] = [
     id: "nominate",
     label: "/nominate",
     summary:
-      "Open a nomination modal for GOTM or NR-GOTM with your current upcoming-round nominations.",
-    syntax: "Syntax: /nominate",
+      "Submit a GOTM or NR-GOTM nomination with a GameDB title, category, and reason.",
+    syntax: "Syntax: /nominate title:<string> type:<GOTM|NR-GOTM> reason:<string>",
+    parameters:
+      "title (required) - GameDB title chosen from autocomplete. type (required) - GOTM or NR-GOTM. reason (required) - why you are nominating it.",
     notes:
-      "The modal includes your current GOTM and NR-GOTM picks for the next round, plus required reason input.",
+      "Title autocomplete includes the release year when available. Running the command again updates your nomination for that category.",
   },
   {
     id: "round",
@@ -218,8 +220,7 @@ const HELP_TOPICS: HelpTopic[] = [
       "synonym-list, csv-import, help.",
     notes:
       "Imports pull titles/covers from IGDB. View shows GOTM/NR-GOTM wins, " +
-      "nominations, and related threads for the GameDB id. Game view also includes " +
-      "a quick Nominate button that opens the /nominate modal prefilled with that title. " +
+      "nominations, and related threads for the GameDB id. " +
       "Audit is admin only.",
   },
   {
@@ -868,7 +869,7 @@ export function buildMainHelpResponse(): {
     .setDescription(
       "Use the category dropdowns below to jump straight to a command’s details.\n\n" +
         "**Monthly Games**\n" +
-        `${formatCommandLine("nominate", "Open the nomination modal for GOTM or NR-GOTM.")}\n` +
+        `${formatCommandLine("nominate", "Submit a GOTM or NR-GOTM nomination.")}\n` +
         `${formatCommandLine("round", "See the current round and winners.")}\n` +
         `${formatCommandLine("round-history", "Browse historical rounds with filters.")}\n` +
         "\n" +
