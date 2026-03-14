@@ -9,9 +9,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
-  type CommandInteraction,
   type RepliableInteraction,
-  type StringSelectMenuInteraction,
   type TextBasedChannel,
 } from "discord.js";
 import {
@@ -104,15 +102,20 @@ export function buildDeletionSelectCustomId(kind: NominationKind, round: number)
   return `${ADMIN_NOMINATION_DELETE_SELECT_PREFIX}:${kind}:${round}`;
 }
 
-export function buildDeletionReasonModalCustomId(sessionId: string): string {
-  return `${ADMIN_NOMINATION_DELETE_REASON_MODAL_PREFIX}:${sessionId}`;
+export function buildDeletionReasonModalCustomId(kind: NominationKind, round: number, userId: string): string {
+  return buildDeletionReasonStateId(kind, round, userId);
 }
 
 export function buildDeletionConfirmCustomId(sessionId: string): string {
   return `${ADMIN_NOMINATION_DELETE_CONFIRM_PREFIX}:${sessionId}`;
 }
 
-export function buildDeletionReasonModal(sessionId: string, gameTitle: string): ModalBuilder {
+export function buildDeletionReasonModal(
+  kind: NominationKind,
+  round: number,
+  userId: string,
+  gameTitle: string,
+): ModalBuilder {
   const reasonInput = new TextInputBuilder()
     .setCustomId(ADMIN_NOMINATION_DELETE_REASON_INPUT_ID)
     .setLabel("Deletion reason")
@@ -122,61 +125,23 @@ export function buildDeletionReasonModal(sessionId: string, gameTitle: string): 
     .setPlaceholder(`Why should "${truncateLabel(gameTitle, 80)}" be removed?`);
 
   return new ModalBuilder()
-    .setCustomId(buildDeletionReasonModalCustomId(sessionId))
+    .setCustomId(buildDeletionReasonModalCustomId(kind, round, userId))
     .setTitle("Delete nomination")
     .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput));
 }
 
-export async function createDeletionReasonSession(
-  interaction: StringSelectMenuInteraction | CommandInteraction,
-  state: PendingDeleteSelectionState,
-): Promise<string> {
-  const sessionId = buildNominationDeleteSessionId(interaction.user.id, state.round, state.userId);
-  await createRawModalSessionRecord({
-    sessionId,
-    ownerUserId: interaction.user.id,
-    feature: "admin",
-    flow: "nomination-delete-reason",
-    guildId: interaction.guildId,
-    channelId: interaction.channelId,
-    stateJson: JSON.stringify(state),
-    expiresAt: buildRawModalSessionExpiry(),
-  });
-  return sessionId;
-}
-
-export async function readDeletionReasonSession(
-  sessionId: string,
-  ownerUserId: string,
-): Promise<PendingDeleteSelectionState | null> {
-  const session = await getRawModalSessionRecord(sessionId);
-  if (!session || session.ownerUserId !== ownerUserId) {
-    return null;
-  }
-  if (isRawModalSessionExpired(session)) {
-    await updateRawModalSessionStatus({ sessionId, status: "expired" });
-    return null;
-  }
-  return parseDeletionReasonSessionRecord(session, ownerUserId);
-}
-
-export function parseDeletionReasonSessionRecord(
-  session: Awaited<ReturnType<typeof getRawModalSessionRecord>>,
-  ownerUserId: string,
-): PendingDeleteSelectionState | null {
-  if (!session || session.ownerUserId !== ownerUserId) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(session.stateJson) as PendingDeleteSelectionState;
-  } catch {
-    return null;
-  }
-}
-
-export async function markDeletionReasonSessionSubmitted(sessionId: string): Promise<void> {
-  await updateRawModalSessionStatus({ sessionId, status: "submitted" });
+export function buildDeletionReasonState(
+  kind: NominationKind,
+  round: number,
+  userId: string,
+  gameTitle: string,
+): PendingDeleteSelectionState {
+  return {
+    kind,
+    round,
+    userId,
+    gameTitle,
+  };
 }
 
 export async function createDeletionConfirmSession(
@@ -364,11 +329,11 @@ export function parseDeletionSelectCustomId(
 }
 
 export function parseDeletionReasonModalCustomId(customId: string): { sessionId: string } | null {
-  const match = customId.match(/^admin-nom-del-reason:([A-Za-z0-9_-]{1,64})$/);
-  if (!match || !match[1]) {
+  const state = parseDeletionReasonStateId(customId);
+  if (!state) {
     return null;
   }
-  return { sessionId: match[1] };
+  return { sessionId: customId };
 }
 
 export function parseDeletionConfirmCustomId(customId: string): { sessionId: string } | null {
@@ -379,8 +344,24 @@ export function parseDeletionConfirmCustomId(customId: string): { sessionId: str
   return { sessionId: match[1] };
 }
 
-function buildNominationDeleteSessionId(userId: string, round: number, nominationUserId: string): string {
-  return `admndr_${userId.slice(-6)}_${round}_${nominationUserId.slice(-6)}_${Date.now().toString(36)}`;
+export function parseDeletionReasonStateId(
+  stateId: string,
+): PendingDeleteSelectionState | null {
+  const match = stateId.match(/^admin-nom-del-reason:(gotm|nr-gotm):(\d+):(\d+)$/);
+  if (!match || !match[1] || !match[2] || !match[3]) {
+    return null;
+  }
+
+  return {
+    kind: match[1] as NominationKind,
+    round: Number(match[2]),
+    userId: match[3],
+    gameTitle: "",
+  };
+}
+
+function buildDeletionReasonStateId(kind: NominationKind, round: number, userId: string): string {
+  return `${ADMIN_NOMINATION_DELETE_REASON_MODAL_PREFIX}:${kind}:${round}:${userId}`;
 }
 
 function buildNominationDeleteConfirmSessionId(

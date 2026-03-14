@@ -12,18 +12,17 @@ import {
 } from "../../classes/Nomination.js";
 import { getUpcomingNominationWindow } from "../../functions/NominationWindow.js";
 import {
+  buildDeletionReasonState,
   buildDeletionReasonModal,
   buildDeletionSelectControls,
   buildDeletionConfirmationView,
   buildNominationDeleteView,
   createDeletionConfirmSession,
-  createDeletionReasonSession,
   handleNominationDeletionButton,
   parseDeletionConfirmCustomId,
   parseDeletionReasonModalCustomId,
+  parseDeletionReasonStateId,
   parseDeletionSelectCustomId,
-  readDeletionReasonSession,
-  markDeletionReasonSessionSubmitted,
 } from "../../functions/NominationAdminHelpers.js";
 import {
   buildComponentsV2Flags,
@@ -90,14 +89,9 @@ export async function handleAdminNominationDeleteSelect(
     return;
   }
 
-  const sessionId = await createDeletionReasonSession(interaction, {
-    kind: parsed.kind,
-    round: parsed.round,
-    userId: selectedUserId,
-    gameTitle: nomination.gameTitle,
-  });
-
-  await interaction.showModal(buildDeletionReasonModal(sessionId, nomination.gameTitle)).catch(async () => {
+  await interaction.showModal(
+    buildDeletionReasonModal(parsed.kind, parsed.round, selectedUserId, nomination.gameTitle),
+  ).catch(async () => {
     await safeReply(interaction, {
       content: "Unable to open the deletion reason prompt. Try again.",
       flags: MessageFlags.Ephemeral,
@@ -117,10 +111,27 @@ export async function handleAdminNominationDeleteReasonModal(
     return;
   }
 
-  const sessionState = await readDeletionReasonSession(parsed.sessionId, interaction.user.id);
+  const parsedState = parseDeletionReasonStateId(parsed.sessionId);
+  if (!parsedState) {
+    await safeReply(interaction, {
+      content: "This nomination deletion prompt is invalid. Run the command again.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const nomination = await getNominationForUser(parsedState.kind, parsedState.round, parsedState.userId);
+  const sessionState = nomination
+    ? buildDeletionReasonState(
+      parsedState.kind,
+      parsedState.round,
+      parsedState.userId,
+      nomination.gameTitle,
+    )
+    : null;
   if (!sessionState) {
     await safeReply(interaction, {
-      content: "This nomination deletion prompt expired. Run the command again.",
+      content: "That nomination no longer exists. Run the command again.",
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -138,7 +149,6 @@ export async function handleAdminNominationDeleteReasonModal(
     return;
   }
 
-  await markDeletionReasonSessionSubmitted(parsed.sessionId);
   const confirmSessionId = await createDeletionConfirmSession(interaction, {
     ...sessionState,
     reason,
