@@ -37,7 +37,6 @@ import {
   handleDeleteNrGotmNomsPanel,
   handleAdminNominationDeleteSelect as handleAdminNominationDeleteSelectAction,
   handleAdminNominationDeleteReasonModal as handleAdminNominationDeleteReasonModalAction,
-  handleAdminNominationDeleteConfirmButton as handleAdminNominationDeleteConfirmButtonAction,
 } from "./admin/nomination-admin.service.js";
 import { handleAddGotm, handleEditGotm } from "./admin/gotm-admin.service.js";
 import { handleAddNrGotm, handleEditNrGotm } from "./admin/nr-gotm-admin.service.js";
@@ -205,16 +204,6 @@ export class Admin {
     }
 
     await handleAdminNominationDeleteReasonModalAction(interaction);
-  }
-
-  @ButtonComponent({ id: /^admin-nom-del-confirm:[A-Za-z0-9_-]{1,64}$/ })
-  async handleAdminNominationDeleteConfirmButton(interaction: ButtonInteraction): Promise<void> {
-    const okToUseCommand: boolean = await isAdmin(interaction);
-    if (!okToUseCommand) {
-      return;
-    }
-
-    await handleAdminNominationDeleteConfirmButtonAction(interaction);
   }
 
   @Slash({ description: "Interactive setup for the next round (GOTM, NR-GOTM, dates)", name: "nextround-setup" })

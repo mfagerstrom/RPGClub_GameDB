@@ -1,5 +1,4 @@
 import type {
-  ButtonInteraction,
   CommandInteraction,
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
@@ -7,6 +6,7 @@ import type {
 import { MessageFlags } from "discord.js";
 import { safeDeferReply, safeReply, sanitizeUserInput } from "../../functions/InteractionUtils.js";
 import {
+  deleteNominationForUser,
   getNominationForUser,
   listNominationsForRound,
 } from "../../classes/Nomination.js";
@@ -15,14 +15,11 @@ import {
   buildDeletionReasonState,
   buildDeletionReasonModal,
   buildDeletionSelectControls,
-  buildDeletionConfirmationView,
   buildNominationDeleteView,
-  createDeletionConfirmSession,
-  handleNominationDeletionButton,
-  parseDeletionConfirmCustomId,
   parseDeletionReasonModalCustomId,
   parseDeletionReasonStateId,
   parseDeletionSelectCustomId,
+  announceNominationChange,
 } from "../../functions/NominationAdminHelpers.js";
 import {
   buildComponentsV2Flags,
@@ -149,37 +146,34 @@ export async function handleAdminNominationDeleteReasonModal(
     return;
   }
 
-  const confirmSessionId = await createDeletionConfirmSession(interaction, {
-    ...sessionState,
-    reason,
-  });
-  const confirmationView = await buildDeletionConfirmationView(
-    sessionState.kind,
-    sessionState.round,
-    reason,
-    confirmSessionId,
-  );
-
   await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+  await deleteNominationForUser(sessionState.kind, sessionState.round, sessionState.userId);
+  const nominations = await listNominationsForRound(sessionState.kind, sessionState.round);
+  const window = await getUpcomingNominationWindow();
+  const payload = await buildNominationListPayload(
+    sessionState.kind === "gotm" ? "GOTM" : "NR-GOTM",
+    "/nominate",
+    {
+      ...window,
+      targetRound: sessionState.round,
+    },
+    nominations,
+    false,
+  );
+  const content =
+    `<@${interaction.user.id}> deleted <@${sessionState.userId}>'s nomination ` +
+    `"${sessionState.gameTitle}" for ${sessionState.kind.toUpperCase()} Round ${sessionState.round}. ` +
+    `Reason: ${reason}`;
+
   await safeReply(interaction, {
-    content:
-      `Review the ${sessionState.kind === "gotm" ? "GOTM" : "NR-GOTM"} nomination list below, ` +
-      `then click Delete Nomination to remove "${sessionState.gameTitle}".`,
-    components: [...confirmationView.payload.components, ...confirmationView.controls],
-    files: confirmationView.payload.files,
+    components: [
+      ...payload.components,
+    ],
+    content,
+    files: payload.files,
     flags: buildComponentsV2Flags(true),
   });
-}
-
-export async function handleAdminNominationDeleteConfirmButton(
-  interaction: ButtonInteraction,
-): Promise<void> {
-  const parsed = parseDeletionConfirmCustomId(interaction.customId);
-  if (!parsed) {
-    return;
-  }
-
-  await handleNominationDeletionButton(interaction, parsed.sessionId);
+  await announceNominationChange(sessionState.kind, interaction, content, payload);
 }
 
 export async function buildDeleteViewForTests(

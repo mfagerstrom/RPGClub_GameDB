@@ -69,14 +69,14 @@ export const ADMIN_HELP_TOPICS: AdminHelpTopic[] = [
     label: "/admin delete-gotm-noms",
     summary: "Interactive panel to delete GOTM nominations.",
     syntax: "Syntax: /admin delete-gotm-noms",
-    notes: "Shows the current nomination list, a title dropdown, a required reason prompt, and a final Delete Nomination confirmation button.",
+    notes: "Shows the current nomination list, a title dropdown, and a required reason prompt. Submitting the modal deletes the nomination immediately.",
   },
   {
     id: "delete-nr-gotm-noms",
     label: "/admin delete-nr-gotm-noms",
     summary: "Interactive panel to delete NR-GOTM nominations.",
     syntax: "Syntax: /admin delete-nr-gotm-noms",
-    notes: "Shows the current nomination list, a title dropdown, a required reason prompt, and a final Delete Nomination confirmation button.",
+    notes: "Shows the current nomination list, a title dropdown, and a required reason prompt. Submitting the modal deletes the nomination immediately.",
   },
   {
     id: "set-nextvote",
