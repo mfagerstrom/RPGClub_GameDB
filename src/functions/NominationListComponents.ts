@@ -160,12 +160,12 @@ function addNominationContent(
   thumbnailUrl: string | undefined,
   altLayout: boolean,
 ): void {
-  if (!altLayout) {
+  if (!altLayout && thumbnailUrl) {
     const section = buildNominationSection(nomination, thumbnailUrl);
     container.addSectionComponents(section);
     return;
   }
-  if (thumbnailUrl) {
+  if (altLayout && thumbnailUrl) {
     const galleryItem = new MediaGalleryItemBuilder()
       .setURL(thumbnailUrl)
       .setDescription(nomination.gameTitle);
