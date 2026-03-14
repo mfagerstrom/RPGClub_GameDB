@@ -1,10 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Game from "../classes/Game.js";
-import { buildDeletionComponents } from "../functions/NominationAdminHelpers.js";
+import { buildDeletionSelectControls } from "../functions/NominationAdminHelpers.js";
 import { buildNominationListPayload } from "../functions/NominationListComponents.js";
 
-test("nomination delete admin view serializes with shared nomination list UI", async () => {
+const nominations = [
+  {
+    id: 1,
+    roundNumber: 140,
+    userId: "123456789012345678",
+    gameTitle: "Example Game One",
+    gamedbGameId: 41,
+    nominatedAt: new Date("2026-03-13T12:00:00.000Z"),
+    reason: "First reason.",
+  },
+  {
+    id: 2,
+    roundNumber: 140,
+    userId: "223456789012345678",
+    gameTitle: "Example Game Two",
+    gamedbGameId: 42,
+    nominatedAt: new Date("2026-03-13T12:05:00.000Z"),
+    reason: "Second reason.",
+  },
+];
+
+test("nomination delete admin view serializes with shared nomination list UI and delete select", async () => {
   const originalGetGameById = Game.getGameById;
   (Game.getGameById as unknown) = async () => null;
 
@@ -17,51 +38,19 @@ test("nomination delete admin view serializes with shared nomination list UI", a
         nextVoteAt: new Date("2026-03-20T12:00:00.000Z"),
         targetRound: 140,
       },
-      [
-        {
-          id: 1,
-          roundNumber: 140,
-          userId: "123456789012345678",
-          gameTitle: "Example Game One",
-          gamedbGameId: 41,
-          nominatedAt: new Date("2026-03-13T12:00:00.000Z"),
-          reason: "First reason.",
-        },
-        {
-          id: 2,
-          roundNumber: 140,
-          userId: "223456789012345678",
-          gameTitle: "Example Game Two",
-          gamedbGameId: 42,
-          nominatedAt: new Date("2026-03-13T12:05:00.000Z"),
-          reason: "Second reason.",
-        },
-      ],
+      nominations,
       false,
+      { includeDetailSelect: false },
     );
-    const deleteButtons = buildDeletionComponents("nr-gotm", 140, [
-      {
-        id: 1,
-        roundNumber: 140,
-        userId: "123456789012345678",
-        gameTitle: "Example Game One",
-        gamedbGameId: 41,
-        nominatedAt: new Date("2026-03-13T12:00:00.000Z"),
-        reason: "First reason.",
-      },
-      {
-        id: 2,
-        roundNumber: 140,
-        userId: "223456789012345678",
-        gameTitle: "Example Game Two",
-        gamedbGameId: 42,
-        nominatedAt: new Date("2026-03-13T12:05:00.000Z"),
-        reason: "Second reason.",
-      },
-    ], "admin");
+    const deleteSelect = buildDeletionSelectControls("nr-gotm", 140, nominations);
 
     assert.equal(payload.files.length, 0);
-    for (const component of [...payload.components, ...deleteButtons]) {
+    const payloadJson = payload.components.map((component) => component.toJSON());
+    assert.equal(
+      JSON.stringify(payloadJson).includes("nom-details"),
+      false,
+    );
+    for (const component of [...payload.components, ...deleteSelect]) {
       assert.doesNotThrow(() => component.toJSON());
     }
   } finally {

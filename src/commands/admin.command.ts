@@ -38,7 +38,9 @@ import {
   handleDeleteNrGotmNomination,
   handleDeleteGotmNomsPanel,
   handleDeleteNrGotmNomsPanel,
-  handleAdminNominationDeleteButton,
+  handleAdminNominationDeleteSelect as handleAdminNominationDeleteSelectAction,
+  handleAdminNominationDeleteReasonModal as handleAdminNominationDeleteReasonModalAction,
+  handleAdminNominationDeleteConfirmButton as handleAdminNominationDeleteConfirmButtonAction,
 } from "./admin/nomination-admin.service.js";
 import { handleAddGotm, handleEditGotm } from "./admin/gotm-admin.service.js";
 import { handleAddNrGotm, handleEditNrGotm } from "./admin/nr-gotm-admin.service.js";
@@ -251,14 +253,34 @@ export class Admin {
     await handleDeleteNrGotmNomsPanel(interaction);
   }
 
-  @ButtonComponent({ id: /^admin-(gotm|nr-gotm)-nom-del-(\d+)-(\d+)$/ })
-  async handleAdminNominationDeleteButton(interaction: ButtonInteraction): Promise<void> {
+  @SelectMenuComponent({ id: /^admin-nom-del-select:(gotm|nr-gotm):(\d+)$/ })
+  async handleAdminNominationDeleteSelect(interaction: StringSelectMenuInteraction): Promise<void> {
     const okToUseCommand: boolean = await isAdmin(interaction);
     if (!okToUseCommand) {
       return;
     }
 
-    await handleAdminNominationDeleteButton(interaction);
+    await handleAdminNominationDeleteSelectAction(interaction);
+  }
+
+  @ModalComponent({ id: /^admin-nom-del-reason:[A-Za-z0-9_-]{1,64}$/ })
+  async handleAdminNominationDeleteReasonModal(interaction: ModalSubmitInteraction): Promise<void> {
+    const okToUseCommand: boolean = await isAdmin(interaction);
+    if (!okToUseCommand) {
+      return;
+    }
+
+    await handleAdminNominationDeleteReasonModalAction(interaction);
+  }
+
+  @ButtonComponent({ id: /^admin-nom-del-confirm:[A-Za-z0-9_-]{1,64}$/ })
+  async handleAdminNominationDeleteConfirmButton(interaction: ButtonInteraction): Promise<void> {
+    const okToUseCommand: boolean = await isAdmin(interaction);
+    if (!okToUseCommand) {
+      return;
+    }
+
+    await handleAdminNominationDeleteConfirmButtonAction(interaction);
   }
 
   @Slash({ description: "Interactive setup for the next round (GOTM, NR-GOTM, dates)", name: "nextround-setup" })

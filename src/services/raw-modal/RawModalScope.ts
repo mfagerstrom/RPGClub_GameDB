@@ -1,7 +1,7 @@
 export const RAW_MODAL_CUSTOM_ID_PREFIX = "modal";
 export const RAW_MODAL_SCHEMA_VERSION = 1;
 
-export const RAW_MODAL_SUPPORTED_FEATURES = ["todo", "suggestion", "nominate", "round-history"] as const;
+export const RAW_MODAL_SUPPORTED_FEATURES = ["todo", "suggestion", "nominate", "round-history", "admin"] as const;
 export type RawModalFeature = (typeof RAW_MODAL_SUPPORTED_FEATURES)[number];
 
 export const RAW_MODAL_TODO_PILOT_FLOWS = [
@@ -22,11 +22,15 @@ export type RawModalNominateFlow = (typeof RAW_MODAL_NOMINATE_FLOWS)[number];
 export const RAW_MODAL_ROUND_HISTORY_FLOWS = ["query"] as const;
 export type RawModalRoundHistoryFlow = (typeof RAW_MODAL_ROUND_HISTORY_FLOWS)[number];
 
+export const RAW_MODAL_ADMIN_FLOWS = ["nomination-delete-reason", "nomination-delete-confirm"] as const;
+export type RawModalAdminFlow = (typeof RAW_MODAL_ADMIN_FLOWS)[number];
+
 export type RawModalFlow =
   | RawModalTodoPilotFlow
   | RawModalSuggestionPilotFlow
   | RawModalNominateFlow
-  | RawModalRoundHistoryFlow;
+  | RawModalRoundHistoryFlow
+  | RawModalAdminFlow;
 
 export const RAW_MODAL_PILOT_COMPONENT_TYPES = [
   "FILE_UPLOAD",

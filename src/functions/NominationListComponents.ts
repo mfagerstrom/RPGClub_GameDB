@@ -44,6 +44,7 @@ export async function buildNominationListPayload(
   window: NominationWindow,
   nominations: INominationEntry[],
   altLayout: boolean,
+  options?: { includeDetailSelect?: boolean },
 ): Promise<NominationListPayload> {
   const { files, thumbnailsByGameId } = await buildNominationAttachments(
     nominations,
@@ -56,6 +57,7 @@ export async function buildNominationListPayload(
     nominations,
     thumbnailsByGameId,
     altLayout,
+    options?.includeDetailSelect ?? true,
   );
   return { components, files };
 }
@@ -67,6 +69,7 @@ function buildNominationContainers(
   nominations: INominationEntry[],
   thumbnailsByGameId: Map<number, string>,
   altLayout: boolean,
+  includeDetailSelect: boolean,
 ): Array<ContainerBuilder | ActionRowBuilder<StringSelectMenuBuilder>> {
   const containers: ContainerBuilder[] = [];
   let container = new ContainerBuilder();
@@ -129,7 +132,7 @@ function buildNominationContainers(
       new TextDisplayBuilder().setContent(buildFooterContent(commandLabel, window)),
     );
   }
-  const selectRows = buildNominationSelectRows(nominations, kindLabel);
+  const selectRows = includeDetailSelect ? buildNominationSelectRows(nominations, kindLabel) : [];
   return [...containers, ...selectRows];
 }
 

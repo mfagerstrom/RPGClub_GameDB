@@ -1,4 +1,5 @@
 import {
+  RAW_MODAL_ADMIN_FLOWS,
   RAW_MODAL_CUSTOM_ID_PREFIX,
   RAW_MODAL_NOMINATE_FLOWS,
   RAW_MODAL_ROUND_HISTORY_FLOWS,
@@ -32,6 +33,7 @@ function isSupportedFlow(value: string): value is RawModalFlow {
     || (RAW_MODAL_SUGGESTION_PILOT_FLOWS as readonly string[]).includes(value)
     || (RAW_MODAL_NOMINATE_FLOWS as readonly string[]).includes(value)
     || (RAW_MODAL_ROUND_HISTORY_FLOWS as readonly string[]).includes(value)
+    || (RAW_MODAL_ADMIN_FLOWS as readonly string[]).includes(value)
   );
 }
 
