@@ -9,6 +9,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
+  type CommandInteraction,
   type RepliableInteraction,
   type StringSelectMenuInteraction,
   type TextBasedChannel,
@@ -127,7 +128,7 @@ export function buildDeletionReasonModal(sessionId: string, gameTitle: string): 
 }
 
 export async function createDeletionReasonSession(
-  interaction: StringSelectMenuInteraction,
+  interaction: StringSelectMenuInteraction | CommandInteraction,
   state: PendingDeleteSelectionState,
 ): Promise<string> {
   const sessionId = buildNominationDeleteSessionId(interaction.user.id, state.round, state.userId);

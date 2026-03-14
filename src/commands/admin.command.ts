@@ -188,24 +188,15 @@ export class Admin {
       type: ApplicationCommandOptionType.User,
     })
     user: User,
-    @SlashOption({
-      description: "Reason for deletion (required)",
-      name: "reason",
-      required: true,
-      type: ApplicationCommandOptionType.String,
-    })
-    reason: string,
     interaction: CommandInteraction,
   ): Promise<void> {
-    await safeDeferReply(interaction);
-
     const okToUseCommand: boolean = await isAdmin(interaction);
     if (!okToUseCommand) {
       await safeReply(interaction, { content: "Access denied. Command requires Administrator role.", flags: MessageFlags.Ephemeral });
       return;
     }
 
-    await handleDeleteNrGotmNomination(interaction, user, reason);
+    await handleDeleteNrGotmNomination(interaction, user);
   }
 
   @Slash({

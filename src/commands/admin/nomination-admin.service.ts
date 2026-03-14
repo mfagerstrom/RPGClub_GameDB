@@ -84,10 +84,7 @@ export async function handleDeleteGotmNomination(
 export async function handleDeleteNrGotmNomination(
   interaction: CommandInteraction,
   user: User,
-  reason: string,
 ): Promise<void> {
-  reason = sanitizeUserInput(reason, { preserveNewlines: true });
-
   try {
     const window = await getUpcomingNominationWindow();
     const targetRound = window.targetRound;
@@ -103,23 +100,18 @@ export async function handleDeleteNrGotmNomination(
       return;
     }
 
-    await deleteNominationForUser("nr-gotm", targetRound, user.id);
-    const nominations = await listNominationsForRound("nr-gotm", targetRound);
-    const payload = await buildNominationListPayload(
-      "NR-GOTM",
-      "/nominate",
-      {
-        ...window,
-        targetRound,
-      },
-      nominations,
-      false,
-    );
-    const adminName = interaction.user.tag ?? interaction.user.username ?? interaction.user.id;
-    const content = `${adminName} deleted <@${user.id}>'s nomination "${nomination.gameTitle}" for NR-GOTM Round ${targetRound}. Reason: ${reason}`;
-
-    await interaction.deleteReply().catch(() => {});
-    await announceNominationChange("nr-gotm", interaction as any, content, payload);
+    const sessionId = await createDeletionReasonSession(interaction, {
+      kind: "nr-gotm",
+      round: targetRound,
+      userId: user.id,
+      gameTitle: nomination.gameTitle,
+    });
+    await interaction.showModal(buildDeletionReasonModal(sessionId, nomination.gameTitle)).catch(async () => {
+      await safeReply(interaction, {
+        content: "Unable to open the deletion reason prompt. Try again.",
+        flags: MessageFlags.Ephemeral,
+      });
+    });
   } catch (err: any) {
     const msg = err?.message ?? String(err);
     await safeReply(interaction, {
