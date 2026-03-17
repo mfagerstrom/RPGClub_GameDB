@@ -20,6 +20,7 @@ import { buildSuperAdminHelpResponse, isSuperAdmin } from "./superadmin.command.
 import { safeDeferReply, safeReply, safeUpdate } from "../functions/InteractionUtils.js";
 
 type HelpTopicId =
+  | "noms"
   | "nominate"
   | "round"
   | "round-history"
@@ -114,6 +115,16 @@ type GameDbHelpTopic = {
 };
 
 const HELP_TOPICS: HelpTopic[] = [
+  {
+    id: "noms",
+    label: "/noms",
+    summary: "Show the current GOTM or NR-GOTM nomination list.",
+    syntax: "Syntax: /noms type:<GOTM|NR-GOTM> [showinchat:<boolean>]",
+    parameters:
+      "type (required) - GOTM or NR-GOTM. showinchat (optional) - set true to share the list in channel.",
+    notes:
+      "Uses the same nomination list UI as a completed /nominate action. Replies privately by default.",
+  },
   {
     id: "nominate",
     label: "/nominate",
@@ -309,7 +320,7 @@ const HELP_CATEGORIES: { id: string; name: string; topicIds: HelpTopicId[] }[] =
   {
     id: "monthly-games",
     name: "Monthly Games",
-    topicIds: ["nominate", "round", "round-history"],
+    topicIds: ["noms", "nominate", "round", "round-history"],
   },
   {
     id: "members",
@@ -869,6 +880,7 @@ export function buildMainHelpResponse(): {
     .setDescription(
       "Use the category dropdowns below to jump straight to a command’s details.\n\n" +
         "**Monthly Games**\n" +
+        `${formatCommandLine("noms", "Show the current nomination list.")}\n` +
         `${formatCommandLine("nominate", "Submit a GOTM or NR-GOTM nomination.")}\n` +
         `${formatCommandLine("round", "See the current round and winners.")}\n` +
         `${formatCommandLine("round-history", "Browse historical rounds with filters.")}\n` +

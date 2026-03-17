@@ -269,6 +269,67 @@ export class NominateCommand {
     }
   }
 
+  @Slash({ description: "Show the current GOTM or NR-GOTM nominations", name: "noms" })
+  async noms(
+    @SlashChoice(
+      { name: "GOTM", value: "gotm" },
+      { name: "NR-GOTM", value: "nr-gotm" },
+    )
+    @SlashOption({
+      description: "Nomination type",
+      name: "type",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+    })
+    rawKind: string,
+    @SlashOption({
+      description: "Show in chat (public) instead of ephemeral",
+      name: "showinchat",
+      required: false,
+      type: ApplicationCommandOptionType.Boolean,
+    })
+    showInChat: boolean = false,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    const selectedKind = parseNominationKind(rawKind);
+    const ephemeral = !showInChat;
+
+    if (!selectedKind) {
+      await safeReply(interaction, {
+        content: "Please choose either GOTM or NR-GOTM.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await safeDeferReply(interaction, { flags: buildComponentsV2Flags(ephemeral) });
+
+    try {
+      const window = await getUpcomingNominationWindow();
+      const nominations = await listNominationsForRound(selectedKind, window.targetRound);
+      const kindLabel = selectedKind === "gotm" ? "GOTM" : "NR-GOTM";
+      const payload = await buildNominationListPayload(
+        kindLabel,
+        "/nominate",
+        window,
+        nominations,
+        false,
+      );
+
+      await safeReply(interaction, {
+        components: payload.components,
+        files: payload.files,
+        flags: buildComponentsV2Flags(ephemeral),
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await safeReply(interaction, {
+        content: `Could not load nominations: ${errorMessage}`,
+        flags: ephemeral ? MessageFlags.Ephemeral : undefined,
+      });
+    }
+  }
+
   @SelectMenuComponent({ id: /^gotm-nom-details:\d+$/ })
   async showGotmNominationDetails(interaction: StringSelectMenuInteraction): Promise<void> {
     await this.showNominationDetails(interaction);
