@@ -5,10 +5,10 @@ import {
   ButtonStyle,
   ContainerBuilder,
   MessageFlags,
-  ModalBuilder,
   ModalSubmitInteraction,
   TextDisplayBuilder,
 } from "discord.js";
+import { ModalBuilder } from "@discordjs/builders";
 import {
   ComponentType as ApiComponentType,
   TextInputStyle as ApiTextInputStyle,
@@ -190,7 +190,7 @@ function buildSuggestionReviewDecisionComponents(
   ];
 }
 
-function buildSuggestionReviewDecisionModal(
+export function buildSuggestionReviewDecisionModal(
   customId: string,
   summaryText: string,
 ): ModalBuilder {
@@ -198,6 +198,14 @@ function buildSuggestionReviewDecisionModal(
     custom_id: customId,
     title: "Suggestion Review Decision",
     components: buildSuggestionReviewDecisionComponents(summaryText),
+  });
+}
+
+export function buildSuggestionCreateModal(): ModalBuilder {
+  return new ModalBuilder({
+    custom_id: SUGGESTION_CREATE_MODAL_ID,
+    title: "Submit Suggestion",
+    components: buildSuggestionCreateModalComponents(),
   });
 }
 
@@ -467,11 +475,7 @@ function buildSuggestionCreateModalComponents(): APIModalInteractionResponseCall
 }
 
 async function openSuggestionCreateModal(interaction: CommandInteraction): Promise<void> {
-  await interaction.showModal(new ModalBuilder({
-    custom_id: SUGGESTION_CREATE_MODAL_ID,
-    title: "Submit Suggestion",
-    components: buildSuggestionCreateModalComponents(),
-  }));
+  await interaction.showModal(buildSuggestionCreateModal());
 }
 
 function extractSuggestionCreateTypeValuesFromInteraction(

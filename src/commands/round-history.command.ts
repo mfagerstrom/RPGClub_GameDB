@@ -9,8 +9,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
-  ModalBuilder,
 } from "discord.js";
+import { ModalBuilder } from "@discordjs/builders";
 import {
   ComponentType as ApiComponentType,
   TextInputStyle as ApiTextInputStyle,
@@ -176,7 +176,7 @@ function buildRoundHistoryModalComponents(): APIModalInteractionResponseCallback
   ];
 }
 
-function buildRoundHistoryModal(sessionId: string): ModalBuilder {
+export function buildRoundHistoryModal(sessionId: string): ModalBuilder {
   return new ModalBuilder({
     custom_id: buildRawModalCustomId({
       feature: "round-history",
