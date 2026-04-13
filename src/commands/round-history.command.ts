@@ -9,6 +9,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  ModalBuilder,
 } from "discord.js";
 import {
   ComponentType as ApiComponentType,
@@ -24,8 +25,7 @@ import NrGotm from "../classes/NrGotm.js";
 import { buildGotmCardsFromEntries, buildGotmSearchMessages } from "../functions/GotmSearchComponents.js";
 import { safeDeferReply, safeDeferUpdate, safeReply, sanitizeUserInput } from "../functions/InteractionUtils.js";
 import { buildComponentsV2Flags } from "../functions/NominationListComponents.js";
-import { RawModalApiService } from "../services/raw-modal/RawModalApiService.js";
-import { parseRawModalCustomId } from "../services/raw-modal/RawModalCustomId.js";
+import { buildRawModalCustomId, parseRawModalCustomId } from "../services/raw-modal/RawModalCustomId.js";
 
 const ROUND_HISTORY_MODAL_TITLE = "Round History";
 const ROUND_HISTORY_HELP_ID = "round-history-help";
@@ -174,6 +174,18 @@ function buildRoundHistoryModalComponents(): APIModalInteractionResponseCallback
       },
     },
   ];
+}
+
+function buildRoundHistoryModal(sessionId: string): ModalBuilder {
+  return new ModalBuilder({
+    custom_id: buildRawModalCustomId({
+      feature: "round-history",
+      flow: "query",
+      sessionId,
+    }),
+    title: ROUND_HISTORY_MODAL_TITLE,
+    components: buildRoundHistoryModalComponents(),
+  });
 }
 
 function parseKind(value: unknown): RoundHistoryKind | null {
@@ -468,20 +480,9 @@ export class RoundHistoryCommand {
     showInChat: boolean | undefined,
     interaction: CommandInteraction,
   ): Promise<void> {
-    const modalApi = new RawModalApiService({
-      applicationId: interaction.applicationId,
-    });
-
     try {
-      await modalApi.openModal({
-        interactionId: interaction.id,
-        interactionToken: interaction.token,
-        feature: "round-history",
-        flow: "query",
-        sessionId: buildRoundHistorySessionId(interaction.user.id, Boolean(showInChat)),
-        title: ROUND_HISTORY_MODAL_TITLE,
-        components: buildRoundHistoryModalComponents(),
-      });
+      const sessionId = buildRoundHistorySessionId(interaction.user.id, Boolean(showInChat));
+      await interaction.showModal(buildRoundHistoryModal(sessionId));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       await safeReply(interaction, {

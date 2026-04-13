@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ContainerBuilder,
   MessageFlags,
+  ModalBuilder,
   ModalSubmitInteraction,
   TextDisplayBuilder,
 } from "discord.js";
@@ -41,7 +42,6 @@ import { createIssue } from "../services/GithubIssuesService.js";
 import { BOT_DEV_CHANNEL_ID, GAMEDB_UPDATES_CHANNEL_ID } from "../config/channels.js";
 import { BOT_DEV_PING_USER_ID } from "../config/users.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
-import { RawModalApiService } from "../services/raw-modal/RawModalApiService.js";
 import { logRawModal } from "../services/raw-modal/RawModalLogging.js";
 
 const SUGGESTION_APPROVE_PREFIX = "suggestion-approve";
@@ -190,6 +190,17 @@ function buildSuggestionReviewDecisionComponents(
   ];
 }
 
+function buildSuggestionReviewDecisionModal(
+  customId: string,
+  summaryText: string,
+): ModalBuilder {
+  return new ModalBuilder({
+    custom_id: customId,
+    title: "Suggestion Review Decision",
+    components: buildSuggestionReviewDecisionComponents(summaryText),
+  });
+}
+
 async function openSuggestionReviewDecisionModal(
   interaction: ButtonInteraction,
   reviewerId: string,
@@ -205,20 +216,8 @@ async function openSuggestionReviewDecisionModal(
     reason: `suggestionId=${suggestionId} summaryLen=${summaryText.length}`,
   });
 
-  const modalApi = new RawModalApiService({
-    applicationId: interaction.applicationId,
-  });
   try {
-    await modalApi.openModal({
-      interactionId: interaction.id,
-      interactionToken: interaction.token,
-      feature: "suggestion",
-      flow: "review-decision",
-      sessionId: `suggestion-${suggestionId}`,
-      customId,
-      title: "Suggestion Review Decision",
-      components: buildSuggestionReviewDecisionComponents(summaryText),
-    });
+    await interaction.showModal(buildSuggestionReviewDecisionModal(customId, summaryText));
     logRawModal("info", "suggestion.review_modal.open_success", {
       feature: "suggestion",
       flow: "review-decision",
@@ -468,19 +467,11 @@ function buildSuggestionCreateModalComponents(): APIModalInteractionResponseCall
 }
 
 async function openSuggestionCreateModal(interaction: CommandInteraction): Promise<void> {
-  const modalApi = new RawModalApiService({
-    applicationId: interaction.applicationId,
-  });
-  await modalApi.openModal({
-    interactionId: interaction.id,
-    interactionToken: interaction.token,
-    feature: "suggestion",
-    flow: "review-decision",
-    sessionId: `suggestion-create-${interaction.user.id}`,
-    customId: SUGGESTION_CREATE_MODAL_ID,
+  await interaction.showModal(new ModalBuilder({
+    custom_id: SUGGESTION_CREATE_MODAL_ID,
     title: "Submit Suggestion",
     components: buildSuggestionCreateModalComponents(),
-  });
+  }));
 }
 
 function extractSuggestionCreateTypeValuesFromInteraction(
@@ -863,23 +854,8 @@ export class SuggestionCommand {
       return;
     }
 
-    const modalApi = new RawModalApiService({
-      applicationId: interaction.applicationId,
-    });
-    const submit = modalApi.parseSubmit(interaction.toJSON());
-    const fallbackExtracted = extractReviewDecisionFromInteraction(interaction);
-    if (!submit) {
-      logRawModal("warn", "suggestion.review_submit.fallback_parser_used", {
-        feature: "suggestion",
-        flow: "review-decision",
-        userId: interaction.user.id,
-        customId: interaction.customId,
-        reason: `decision=${fallbackExtracted.decision ?? "null"} reasonLen=${fallbackExtracted.reason.length}`,
-      });
-    }
-
-    const rawDecision = submit?.values[SUGGESTION_REVIEW_DECISION_ID];
-    const decision = typeof rawDecision === "string" ? rawDecision : fallbackExtracted.decision;
+    const extracted = extractReviewDecisionFromInteraction(interaction);
+    const decision = extracted.decision;
     if (decision !== "accept" && decision !== "reject") {
       await safeReply(interaction, {
         content: "Select Accept or Reject.",
@@ -888,10 +864,7 @@ export class SuggestionCommand {
       return;
     }
 
-    const rawReason = submit?.values[SUGGESTION_REVIEW_REASON_ID];
-    const reason = typeof rawReason === "string"
-      ? sanitizeUserInput(rawReason, { preserveNewlines: true })
-      : fallbackExtracted.reason;
+    const reason = extracted.reason;
 
     if (decision === "reject" && !reason) {
       await safeReply(interaction, {
