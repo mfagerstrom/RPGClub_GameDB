@@ -10,11 +10,16 @@ import {
   ButtonStyle,
   MessageFlags,
 } from "discord.js";
-import { ModalBuilder } from "@discordjs/builders";
 import {
-  ComponentType as ApiComponentType,
+  ActionRowBuilder as ModalActionRowBuilder,
+  LabelBuilder,
+  ModalBuilder,
+  RadioGroupBuilder,
+  StringSelectMenuBuilder as ModalStringSelectMenuBuilder,
+  TextInputBuilder as ModalTextInputBuilder,
+} from "@discordjs/builders";
+import {
   TextInputStyle as ApiTextInputStyle,
-  type APIModalInteractionResponseCallbackComponent,
   type APISelectMenuOption,
 } from "discord-api-types/v10";
 import { ButtonComponent, Discord, ModalComponent, Slash, SlashOption } from "discordx";
@@ -99,93 +104,76 @@ function getModalYearOptions(): APISelectMenuOption[] {
     }));
 }
 
-function buildRoundHistoryModalComponents(): APIModalInteractionResponseCallbackComponent[] {
+export function buildRoundHistoryModal(sessionId: string): ModalBuilder {
   const helpText =
     "Filter by category, optional title text, and year. " +
     "Sort controls round order. Results show up to 5 rounds per page.";
 
-  return [
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: ROUND_HISTORY_HELP_ID,
-          label: "How this form works",
-          style: ApiTextInputStyle.Paragraph,
-          required: false,
-          max_length: 500,
-          value: helpText,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.Label,
-      label: "Category",
-      description: "Required",
-      component: {
-        type: ApiComponentType.RadioGroup,
-        custom_id: ROUND_HISTORY_KIND_ID,
-        required: true,
-        options: [
-          { label: "GOTM", value: "gotm" },
-          { label: "NR-GOTM", value: "nr-gotm" },
-          { label: "Both", value: "both", default: true },
-        ],
-      },
-    },
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: ROUND_HISTORY_QUERY_ID,
-          label: "Query (optional title match)",
-          style: ApiTextInputStyle.Short,
-          required: false,
-          max_length: 30,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.Label,
-      label: "Year",
-      description: "Required",
-      component: {
-        type: ApiComponentType.StringSelect,
-        custom_id: ROUND_HISTORY_YEAR_ID,
-        min_values: 1,
-        max_values: 1,
-        options: getModalYearOptions(),
-      },
-    },
-    {
-      type: ApiComponentType.Label,
-      label: "Sort",
-      description: "Round number order",
-      component: {
-        type: ApiComponentType.RadioGroup,
-        custom_id: ROUND_HISTORY_SORT_ID,
-        required: true,
-        options: [
-          { label: "Ascending", value: "asc", default: true },
-          { label: "Descending", value: "desc" },
-        ],
-      },
-    },
-  ];
-}
-
-export function buildRoundHistoryModal(sessionId: string): ModalBuilder {
-  return new ModalBuilder({
-    custom_id: buildRawModalCustomId({
+  return new ModalBuilder()
+    .setCustomId(buildRawModalCustomId({
       feature: "round-history",
       flow: "query",
       sessionId,
-    }),
-    title: ROUND_HISTORY_MODAL_TITLE,
-    components: buildRoundHistoryModalComponents(),
-  });
+    }))
+    .setTitle(ROUND_HISTORY_MODAL_TITLE)
+    .addActionRowComponents(
+      new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
+        new ModalTextInputBuilder()
+          .setCustomId(ROUND_HISTORY_HELP_ID)
+          .setLabel("How this form works")
+          .setStyle(ApiTextInputStyle.Paragraph)
+          .setRequired(false)
+          .setMaxLength(500)
+          .setValue(helpText),
+      ),
+    )
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Category")
+        .setDescription("Required")
+        .setRadioGroupComponent(
+          new RadioGroupBuilder()
+            .setCustomId(ROUND_HISTORY_KIND_ID)
+            .setRequired(true)
+            .setOptions(
+              { label: "GOTM", value: "gotm" },
+              { label: "NR-GOTM", value: "nr-gotm" },
+              { label: "Both", value: "both", default: true },
+            ),
+        ),
+      new LabelBuilder()
+        .setLabel("Year")
+        .setDescription("Required")
+        .setStringSelectMenuComponent(
+          new ModalStringSelectMenuBuilder()
+            .setCustomId(ROUND_HISTORY_YEAR_ID)
+            .setMinValues(1)
+            .setMaxValues(1)
+            .setOptions(getModalYearOptions()),
+        ),
+      new LabelBuilder()
+        .setLabel("Sort")
+        .setDescription("Round number order")
+        .setRadioGroupComponent(
+          new RadioGroupBuilder()
+            .setCustomId(ROUND_HISTORY_SORT_ID)
+            .setRequired(true)
+            .setOptions(
+              { label: "Ascending", value: "asc", default: true },
+              { label: "Descending", value: "desc" },
+            ),
+        ),
+    )
+    .addActionRowComponents(
+      new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
+        new ModalTextInputBuilder()
+          .setCustomId(ROUND_HISTORY_QUERY_ID)
+          .setLabel("Query (optional title match)")
+          .setStyle(ApiTextInputStyle.Short)
+          .setRequired(false)
+          .setMaxLength(30),
+      ),
+    );
 }
 
 function getRoundHistoryModalComponentSummary(value: unknown): string {

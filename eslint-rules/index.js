@@ -320,6 +320,54 @@ function containsUnstableExpression(node) {
   return false;
 }
 
+function containsNewModalComponentType(node) {
+  if (!node) return false;
+  const nodes = [node];
+  while (nodes.length) {
+    const current = nodes.pop();
+    if (!current) continue;
+
+    if (
+      current.type === "NewExpression" &&
+      current.callee.type === "Identifier" &&
+      NEW_MODAL_COMPONENT_BUILDER_NAMES.has(current.callee.name)
+    ) {
+      return true;
+    }
+
+    if (
+      current.type === "MemberExpression" &&
+      current.property.type === "Identifier" &&
+      NEW_MODAL_COMPONENT_TYPE_NAMES.has(current.property.name)
+    ) {
+      return true;
+    }
+
+    if (
+      current.type === "Property" &&
+      getPropertyName(current.key) === "type" &&
+      current.value.type === "Literal" &&
+      typeof current.value.value === "number" &&
+      NEW_MODAL_COMPONENT_TYPE_NUMBERS.has(current.value.value)
+    ) {
+      return true;
+    }
+
+    for (const key of Object.keys(current)) {
+      const value = current[key];
+      if (!value) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item && typeof item.type === "string") nodes.push(item);
+        }
+      } else if (value && typeof value.type === "string") {
+        nodes.push(value);
+      }
+    }
+  }
+  return false;
+}
+
 function shouldIgnoreUnusedVariable(variable) {
   if (!variable || !variable.identifiers?.length) return true;
   const name = variable.identifiers[0]?.name ?? "";
@@ -703,11 +751,14 @@ export default {
         messages: {
           useBuildersModalBuilder:
             "Import ModalBuilder from @discordjs/builders when using Label, RadioGroup, CheckboxGroup, or FileUpload modal components. The discord.js re-export may fail to serialize these component types.",
+          avoidRawComponentsConstructor:
+            "Build newer modal component types with explicit ModalBuilder methods and component builders instead of passing raw components into the ModalBuilder constructor.",
         },
       },
       create(context) {
         const discordJsModalBuilderImports = [];
         const buildersModalBuilderLocalNames = new Set();
+        const modalBuilderLocalNames = new Set();
         let usesNewModalComponentType = false;
 
         const markNewModalComponentUsage = () => {
@@ -734,8 +785,10 @@ export default {
 
               if (node.source.value === DISCORD_JS_SOURCE) {
                 discordJsModalBuilderImports.push(specifier);
+                modalBuilderLocalNames.add(specifier.local.name);
               } else if (node.source.value === MODAL_COMPONENT_BUILDER_SOURCE) {
                 buildersModalBuilderLocalNames.add(specifier.local.name);
+                modalBuilderLocalNames.add(specifier.local.name);
               }
             }
           },
@@ -749,6 +802,29 @@ export default {
             if (node.callee.type !== "Identifier") return;
             if (NEW_MODAL_COMPONENT_BUILDER_NAMES.has(node.callee.name)) {
               markNewModalComponentUsage();
+              return;
+            }
+
+            if (!modalBuilderLocalNames.has(node.callee.name)) {
+              return;
+            }
+
+            const firstArg = node.arguments[0];
+            if (!firstArg || firstArg.type !== "ObjectExpression") {
+              return;
+            }
+
+            const componentsProperty = getObjectPropertyValue(firstArg, "components");
+            if (!componentsProperty) {
+              return;
+            }
+
+            if (containsNewModalComponentType(componentsProperty)) {
+              markNewModalComponentUsage();
+              context.report({
+                node: componentsProperty,
+                messageId: "avoidRawComponentsConstructor",
+              });
             }
           },
           Property(node) {

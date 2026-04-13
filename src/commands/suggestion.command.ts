@@ -8,12 +8,15 @@ import {
   ModalSubmitInteraction,
   TextDisplayBuilder,
 } from "discord.js";
-import { ModalBuilder } from "@discordjs/builders";
 import {
-  ComponentType as ApiComponentType,
-  TextInputStyle as ApiTextInputStyle,
-  type APIModalInteractionResponseCallbackComponent,
-} from "discord-api-types/v10";
+  ActionRowBuilder as ModalActionRowBuilder,
+  CheckboxGroupBuilder,
+  LabelBuilder,
+  ModalBuilder,
+  RadioGroupBuilder,
+  TextInputBuilder as ModalTextInputBuilder,
+} from "@discordjs/builders";
+import { TextInputStyle as ApiTextInputStyle } from "discord-api-types/v10";
 import {
   ButtonComponent,
   Discord,
@@ -130,83 +133,101 @@ function parseSuggestionReviewDecisionModalId(
   return reviewerId ? { reviewerId, suggestionId } : null;
 }
 
-function buildSuggestionReviewDecisionComponents(
-  summaryText: string,
-): APIModalInteractionResponseCallbackComponent[] {
-  const summaryValue = summaryText.length > MAX_MODAL_TEXT_INPUT_VALUE
-    ? `${summaryText.slice(0, MAX_MODAL_TEXT_INPUT_VALUE - 3)}...`
-    : summaryText;
-
-  return [
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: SUGGESTION_REVIEW_SUMMARY_ID,
-          label: "Suggestion Review",
-          style: ApiTextInputStyle.Paragraph,
-          required: false,
-          max_length: MAX_MODAL_TEXT_INPUT_VALUE,
-          value: summaryValue,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.Label,
-      label: "Review Decision",
-      description: "Choose one action",
-      component: {
-        type: ApiComponentType.RadioGroup,
-        custom_id: SUGGESTION_REVIEW_DECISION_ID,
-        required: true,
-        options: [
-          {
-            label: "Accept",
-            value: "accept",
-            description: "Create GitHub issue from this suggestion",
-          },
-          {
-            label: "Reject",
-            value: "reject",
-            description: "Reject and notify the suggestion author",
-          },
-        ],
-      },
-    },
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: SUGGESTION_REVIEW_REASON_ID,
-          label: "Rejection reason (required when Reject)",
-          style: ApiTextInputStyle.Paragraph,
-          required: false,
-          max_length: 1000,
-        },
-      ],
-    },
-  ];
-}
-
 export function buildSuggestionReviewDecisionModal(
   customId: string,
   summaryText: string,
 ): ModalBuilder {
-  return new ModalBuilder({
-    custom_id: customId,
-    title: "Suggestion Review Decision",
-    components: buildSuggestionReviewDecisionComponents(summaryText),
-  });
+  const summaryValue = summaryText.length > MAX_MODAL_TEXT_INPUT_VALUE
+    ? `${summaryText.slice(0, MAX_MODAL_TEXT_INPUT_VALUE - 3)}...`
+    : summaryText;
+
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle("Suggestion Review Decision")
+    .addActionRowComponents(
+      new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
+        new ModalTextInputBuilder()
+          .setCustomId(SUGGESTION_REVIEW_SUMMARY_ID)
+          .setLabel("Suggestion Review")
+          .setStyle(ApiTextInputStyle.Paragraph)
+          .setRequired(false)
+          .setMaxLength(MAX_MODAL_TEXT_INPUT_VALUE)
+          .setValue(summaryValue),
+      ),
+    )
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Review Decision")
+        .setDescription("Choose one action")
+        .setRadioGroupComponent(
+          new RadioGroupBuilder()
+            .setCustomId(SUGGESTION_REVIEW_DECISION_ID)
+            .setRequired(true)
+            .setOptions(
+              {
+                label: "Accept",
+                value: "accept",
+                description: "Create GitHub issue from this suggestion",
+              },
+              {
+                label: "Reject",
+                value: "reject",
+                description: "Reject and notify the suggestion author",
+              },
+            ),
+        ),
+    )
+    .addActionRowComponents(
+      new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
+        new ModalTextInputBuilder()
+          .setCustomId(SUGGESTION_REVIEW_REASON_ID)
+          .setLabel("Rejection reason (required when Reject)")
+          .setStyle(ApiTextInputStyle.Paragraph)
+          .setRequired(false)
+          .setMaxLength(1000),
+      ),
+    );
 }
 
 export function buildSuggestionCreateModal(): ModalBuilder {
-  return new ModalBuilder({
-    custom_id: SUGGESTION_CREATE_MODAL_ID,
-    title: "Submit Suggestion",
-    components: buildSuggestionCreateModalComponents(),
-  });
+  return new ModalBuilder()
+    .setCustomId(SUGGESTION_CREATE_MODAL_ID)
+    .setTitle("Submit Suggestion")
+    .addActionRowComponents(
+      new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
+        new ModalTextInputBuilder()
+          .setCustomId(SUGGESTION_CREATE_TITLE_ID)
+          .setLabel("Title")
+          .setStyle(ApiTextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(256),
+      ),
+      new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
+        new ModalTextInputBuilder()
+          .setCustomId(SUGGESTION_CREATE_DETAILS_ID)
+          .setLabel("Description")
+          .setStyle(ApiTextInputStyle.Paragraph)
+          .setRequired(true)
+          .setMaxLength(4000),
+      ),
+    )
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("Suggestion Type(s)")
+        .setDescription("Select one or more suggestion types")
+        .setCheckboxGroupComponent(
+          new CheckboxGroupBuilder()
+            .setCustomId(SUGGESTION_CREATE_TYPE_ID)
+            .setMinValues(1)
+            .setMaxValues(SUGGESTION_LABELS.length)
+            .setOptions(
+              ...SUGGESTION_LABELS.map((typeLabel) => ({
+                label: typeLabel,
+                value: typeLabel,
+              })),
+            ),
+        ),
+    );
 }
 
 async function openSuggestionReviewDecisionModal(
@@ -426,52 +447,6 @@ function parseSuggestionApproveId(id: string): number | null {
   }
   const suggestionId = Number(parts[1]);
   return Number.isInteger(suggestionId) && suggestionId > 0 ? suggestionId : null;
-}
-
-function buildSuggestionCreateModalComponents(): APIModalInteractionResponseCallbackComponent[] {
-  return [
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: SUGGESTION_CREATE_TITLE_ID,
-          label: "Title",
-          style: ApiTextInputStyle.Short,
-          required: true,
-          max_length: 256,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.ActionRow,
-      components: [
-        {
-          type: ApiComponentType.TextInput,
-          custom_id: SUGGESTION_CREATE_DETAILS_ID,
-          label: "Description",
-          style: ApiTextInputStyle.Paragraph,
-          required: true,
-          max_length: 4000,
-        },
-      ],
-    },
-    {
-      type: ApiComponentType.Label,
-      label: "Suggestion Type(s)",
-      description: "Select one or more suggestion types",
-      component: {
-        type: ApiComponentType.CheckboxGroup,
-        custom_id: SUGGESTION_CREATE_TYPE_ID,
-        min_values: 1,
-        max_values: SUGGESTION_LABELS.length,
-        options: SUGGESTION_LABELS.map((typeLabel) => ({
-          label: typeLabel,
-          value: typeLabel,
-        })),
-      },
-    },
-  ];
 }
 
 async function openSuggestionCreateModal(interaction: CommandInteraction): Promise<void> {
