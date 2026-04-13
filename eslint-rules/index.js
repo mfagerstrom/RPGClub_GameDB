@@ -60,6 +60,20 @@ const COMPONENTS_V2_PAYLOAD_FACTORY_NAMES = new Set([
 const MESSAGE_SEND_METHODS = new Set(["send"]);
 const ASSET_PATH_HELPER_NAME = "resolveAssetPath";
 const ATTACHMENT_BUILDER_NAME = "AttachmentBuilder";
+const MODAL_COMPONENT_BUILDER_SOURCE = "@discordjs/builders";
+const NEW_MODAL_COMPONENT_TYPE_NAMES = new Set([
+  "Label",
+  "RadioGroup",
+  "CheckboxGroup",
+  "FileUpload",
+]);
+const NEW_MODAL_COMPONENT_BUILDER_NAMES = new Set([
+  "LabelBuilder",
+  "RadioGroupBuilder",
+  "CheckboxGroupBuilder",
+  "FileUploadBuilder",
+]);
+const NEW_MODAL_COMPONENT_TYPE_NUMBERS = new Set([18, 19, 21, 22]);
 
 function isRelativeImportPath(value) {
   return typeof value === "string" && value.startsWith(".");
@@ -678,6 +692,85 @@ function getEnclosingFunctionName(node) {
 
 export default {
   rules: {
+    "no-discordjs-modalbuilder-for-new-modal-components": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Require @discordjs/builders ModalBuilder when using newer modal component types.",
+        },
+        schema: [],
+        messages: {
+          useBuildersModalBuilder:
+            "Import ModalBuilder from @discordjs/builders when using Label, RadioGroup, CheckboxGroup, or FileUpload modal components. The discord.js re-export may fail to serialize these component types.",
+        },
+      },
+      create(context) {
+        const discordJsModalBuilderImports = [];
+        const buildersModalBuilderLocalNames = new Set();
+        let usesNewModalComponentType = false;
+
+        const markNewModalComponentUsage = () => {
+          usesNewModalComponentType = true;
+        };
+
+        const isNewModalComponentTypeLiteral = (node) =>
+          Boolean(
+            node &&
+              node.type === "Literal" &&
+              typeof node.value === "number" &&
+              NEW_MODAL_COMPONENT_TYPE_NUMBERS.has(node.value),
+          );
+
+        return {
+          ImportDeclaration(node) {
+            if (node.source.value !== DISCORD_JS_SOURCE && node.source.value !== MODAL_COMPONENT_BUILDER_SOURCE) {
+              return;
+            }
+
+            for (const specifier of node.specifiers) {
+              if (specifier.type !== "ImportSpecifier") continue;
+              if (specifier.imported.name !== "ModalBuilder") continue;
+
+              if (node.source.value === DISCORD_JS_SOURCE) {
+                discordJsModalBuilderImports.push(specifier);
+              } else if (node.source.value === MODAL_COMPONENT_BUILDER_SOURCE) {
+                buildersModalBuilderLocalNames.add(specifier.local.name);
+              }
+            }
+          },
+          MemberExpression(node) {
+            if (node.property.type !== "Identifier") return;
+            if (NEW_MODAL_COMPONENT_TYPE_NAMES.has(node.property.name)) {
+              markNewModalComponentUsage();
+            }
+          },
+          NewExpression(node) {
+            if (node.callee.type !== "Identifier") return;
+            if (NEW_MODAL_COMPONENT_BUILDER_NAMES.has(node.callee.name)) {
+              markNewModalComponentUsage();
+            }
+          },
+          Property(node) {
+            const keyName = getPropertyName(node.key);
+            if (keyName === "type" && isNewModalComponentTypeLiteral(node.value)) {
+              markNewModalComponentUsage();
+            }
+          },
+          "Program:exit"() {
+            if (!usesNewModalComponentType) return;
+            if (buildersModalBuilderLocalNames.size > 0) return;
+
+            for (const specifier of discordJsModalBuilderImports) {
+              context.report({
+                node: specifier,
+                messageId: "useBuildersModalBuilder",
+              });
+            }
+          },
+        };
+      },
+    },
     "prefer-safe-interaction-methods": {
       meta: {
         type: "suggestion",

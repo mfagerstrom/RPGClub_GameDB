@@ -188,6 +188,47 @@ export function buildRoundHistoryModal(sessionId: string): ModalBuilder {
   });
 }
 
+function getRoundHistoryModalComponentSummary(value: unknown): string {
+  const components = (value as { components?: unknown })?.components;
+  if (!Array.isArray(components)) {
+    return "components=not-array";
+  }
+
+  return components
+    .map((component, index) => {
+      const topLevel = component as {
+        type?: unknown;
+        component?: { type?: unknown; custom_id?: unknown };
+        components?: Array<{ type?: unknown; custom_id?: unknown }>;
+      };
+      const children = Array.isArray(topLevel.components)
+        ? topLevel.components
+        : topLevel.component
+          ? [topLevel.component]
+          : [];
+      const childTypes = children
+        .map((child) => `${String(child.type)}:${String(child.custom_id ?? "no-id")}`)
+        .join(",");
+      return `${index}:${String(topLevel.type)}[${childTypes}]`;
+    })
+    .join(" ");
+}
+
+function logRoundHistoryModalDebug(
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  const safeDetails = Object.fromEntries(
+    Object.entries(details).map(([key, value]) => [
+      key,
+      value instanceof Error
+        ? `${value.name}: ${value.message}\n${value.stack ?? ""}`
+        : value,
+    ]),
+  );
+  console.info(`[RoundHistoryModalDebug] ${event} ${JSON.stringify(safeDetails)}`);
+}
+
 function parseKind(value: unknown): RoundHistoryKind | null {
   return value === "gotm" || value === "nr-gotm" || value === "both"
     ? value
@@ -480,11 +521,47 @@ export class RoundHistoryCommand {
     showInChat: boolean | undefined,
     interaction: CommandInteraction,
   ): Promise<void> {
+    const sessionId = buildRoundHistorySessionId(interaction.user.id, Boolean(showInChat));
+    let modal: ModalBuilder | null = null;
+    let modalJson: unknown = null;
+
     try {
-      const sessionId = buildRoundHistorySessionId(interaction.user.id, Boolean(showInChat));
-      await interaction.showModal(buildRoundHistoryModal(sessionId));
+      modal = buildRoundHistoryModal(sessionId);
+      modalJson = modal.toJSON();
+      logRoundHistoryModalDebug("open.before_show", {
+        sessionId,
+        showInChat: Boolean(showInChat),
+        modalConstructor: modal.constructor.name,
+        hasToJson: typeof modal.toJSON === "function",
+        customId: (modalJson as { custom_id?: unknown }).custom_id,
+        componentSummary: getRoundHistoryModalComponentSummary(modalJson),
+      });
+
+      await interaction.showModal(modal);
+      logRoundHistoryModalDebug("open.show_success", {
+        sessionId,
+      });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      let postErrorJson: unknown = modalJson;
+      let postErrorJsonError: unknown = null;
+      if (modal && !postErrorJson) {
+        try {
+          postErrorJson = modal.toJSON();
+        } catch (jsonError: unknown) {
+          postErrorJsonError = jsonError;
+        }
+      }
+      logRoundHistoryModalDebug("open.show_failed", {
+        sessionId,
+        showInChat: Boolean(showInChat),
+        error: error instanceof Error ? error : String(error),
+        modalConstructor: modal?.constructor.name ?? "none",
+        hasModalToJson: modal ? typeof modal.toJSON === "function" : false,
+        postErrorJsonError:
+          postErrorJsonError instanceof Error ? postErrorJsonError : String(postErrorJsonError ?? ""),
+        componentSummary: getRoundHistoryModalComponentSummary(postErrorJson),
+      });
       await safeReply(interaction, {
         content: `Unable to open round history form: ${errorMessage}`,
         flags: MessageFlags.Ephemeral,
