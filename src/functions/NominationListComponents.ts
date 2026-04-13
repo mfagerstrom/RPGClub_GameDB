@@ -20,7 +20,7 @@ import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 
 const MAX_THUMBNAILS = 10;
 const MAX_SECTIONS_PER_CONTAINER = 10;
-const MAX_REASON_LENGTH = 200;
+const MAX_REASON_LENGTH = 1500;
 const MAX_SELECT_OPTIONS = 25;
 
 export type NominationWindow = {

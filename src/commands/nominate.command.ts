@@ -31,7 +31,7 @@ import { safeDeferReply, safeReply, sanitizeUserInput } from "../functions/Inter
 import { GOTM_NOMINATION_CHANNEL_ID, NR_GOTM_NOMINATION_CHANNEL_ID } from "../config/nominationChannels.js";
 import { GameDb } from "./gamedb.command.js";
 
-const NOMINATE_REASON_MAX_LENGTH = 250;
+const NOMINATE_REASON_MAX_LENGTH = 1500;
 
 async function autocompleteNominationTitle(
   interaction: AutocompleteInteraction,
@@ -158,6 +158,7 @@ export class NominateCommand {
     rawKind: string,
     @SlashOption({
       description: "Reason for your nomination",
+      maxLength: NOMINATE_REASON_MAX_LENGTH,
       name: "reason",
       required: true,
       type: ApplicationCommandOptionType.String,
@@ -166,10 +167,7 @@ export class NominateCommand {
     interaction: CommandInteraction,
   ): Promise<void> {
     const cleanedTitle = sanitizeUserInput(rawTitle, { preserveNewlines: false, maxLength: 256 });
-    const cleanedReason = sanitizeUserInput(rawReason, {
-      preserveNewlines: true,
-      maxLength: NOMINATE_REASON_MAX_LENGTH,
-    });
+    const cleanedReason = sanitizeUserInput(rawReason, { preserveNewlines: true });
     const selectedKind = parseNominationKind(rawKind);
 
     if (!cleanedTitle) {
@@ -191,6 +189,14 @@ export class NominateCommand {
     if (!cleanedReason) {
       await safeReply(interaction, {
         content: "Reason is required.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (cleanedReason.length > NOMINATE_REASON_MAX_LENGTH) {
+      await safeReply(interaction, {
+        content: `Reason must be ${NOMINATE_REASON_MAX_LENGTH} characters or fewer.`,
         flags: MessageFlags.Ephemeral,
       });
       return;

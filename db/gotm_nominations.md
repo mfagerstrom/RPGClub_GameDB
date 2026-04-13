@@ -20,4 +20,4 @@ Oracle table storing Game of the Month nominations by round and user.
 | USER_ID | VARCHAR2(64) | No | — | Discord user id; part of unique constraint. |
 | GAMEDB_GAME_ID | NUMBER | No | — | Reference to GAMEDB_GAMES.GAME_ID. |
 | NOMINATED_AT | TIMESTAMP(6) | No | CURRENT_TIMESTAMP | When the nomination was recorded. |
-| REASON | VARCHAR2(250) | Yes | — | Optional nomination reason. |
+| REASON | VARCHAR2(1500) | Yes | — | Optional nomination reason. |
