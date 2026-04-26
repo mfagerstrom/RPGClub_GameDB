@@ -11,7 +11,6 @@ type ReminderDefinition = {
   kind: "fiveDay" | "oneDay";
   daysBefore: number;
   wasSent: (entry: IBotVotingInfoEntry) => boolean;
-  description: string;
 };
 
 const REMINDERS: ReminderDefinition[] = [
@@ -19,13 +18,11 @@ const REMINDERS: ReminderDefinition[] = [
     kind: "fiveDay",
     daysBefore: 5,
     wasSent: (entry) => entry.fiveDayReminderSent,
-    description: "Voting is in five days",
   },
   {
     kind: "oneDay",
     daysBefore: 1,
     wasSent: (entry) => entry.oneDayReminderSent,
-    description: "Voting is tomorrow",
   },
 ];
 
@@ -101,10 +98,9 @@ async function checkAndSendReminders(client: Client): Promise<void> {
       continue;
     }
 
-    const voteLabel = `${voteDateEt.toFormat("cccc, LLL dd")} (ET)`;
-
+    const voteUnix = Math.floor(voteDateEt.toSeconds());
     const content =
-      `${reminder.description}! (${voteLabel})\n` +
+      `Voting is <t:${voteUnix}:R> (<t:${voteUnix}:D>)!\n` +
       "Please nominate games for the upcoming vote so they can be included.";
 
     const sent = await sendReminderToAllChannels(client, content);
