@@ -269,17 +269,8 @@ async function openSuggestionReviewDecisionModal(
 
 function formatSuggestionTimestampPlain(date: Date | null | undefined): string {
   if (!date) return "Unknown";
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "2-digit",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
-  } catch {
-    return date.toISOString();
-  }
+  const unixSeconds = Math.floor(date.getTime() / 1000);
+  return `<t:${unixSeconds}:F>`;
 }
 
 function buildSuggestionReviewSummaryText(

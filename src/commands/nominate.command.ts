@@ -207,10 +207,11 @@ export class NominateCommand {
     try {
       const window = await getUpcomingNominationWindow();
       if (areNominationsClosed(window)) {
+        const voteUnix = Math.floor(window.nextVoteAt.getTime() / 1000);
         await safeReply(interaction, {
           content:
             `Nominations for Round ${window.targetRound} are closed. ` +
-            `Voting is scheduled for ${window.nextVoteAt.toLocaleString()}.`,
+            `Voting is scheduled for <t:${voteUnix}:F>.`,
           flags: MessageFlags.Ephemeral,
         });
         return;

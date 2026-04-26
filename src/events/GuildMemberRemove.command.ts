@@ -7,6 +7,10 @@ const KICK_LOG_WINDOW_MS = 30_000;
 const KICK_LOG_RETRY_COUNT = 3;
 const KICK_LOG_RETRY_DELAY_MS = 750;
 
+function formatDiscordDateTime(date: Date): string {
+  return `<t:${Math.floor(date.getTime() / 1000)}:F>`;
+}
+
 async function resolveLogChannel(client: Client): Promise<any | null> {
   const channel = await client.channels.fetch(JOIN_LEAVE_LOG_CHANNEL_ID).catch(() => null);
   if (!channel || !channel.isTextBased()) return null;
@@ -69,7 +73,7 @@ export class GuildMemberRemove {
           { name: "User", value: `<@${member.user.id}>\n${username}` },
           {
             name: "Account Created On",
-            value: member.user.createdAt.toLocaleString("en-US"),
+            value: formatDiscordDateTime(member.user.createdAt),
           },
           { name: "Moderator", value: `<@${kickAudit.moderatorId}>` },
           {
@@ -93,7 +97,7 @@ export class GuildMemberRemove {
         { name: "User", value: `<@${member.user.id}>\n${username}` },
         {
           name: "Account Created On",
-          value: member.user.createdAt.toLocaleString("en-US"),
+          value: formatDiscordDateTime(member.user.createdAt),
         },
       )
       .setFooter({

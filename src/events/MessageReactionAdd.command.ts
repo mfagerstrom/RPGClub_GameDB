@@ -418,13 +418,14 @@ export class MessageReactionAdd {
       return;
     }
 
+    const completedAtUnix = Math.floor(session.completedAt.getTime() / 1000);
     await interaction.update({
       content: [
         "Completion added.",
         `Member: <@${session.targetUserId}>`,
         `Game: ${game.title}`,
         `Type: ${completionType}`,
-        `Date: ${session.completedAt.toLocaleDateString()}`,
+        `Date: <t:${completedAtUnix}:D>`,
         `Message: ${session.messageUrl}`,
       ].join("\n"),
       components: [],

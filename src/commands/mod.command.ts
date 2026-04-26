@@ -142,9 +142,11 @@ export class Mod {
 
     const lines = entries.map((entry) => {
       const timestamp =
-        entry.setAt instanceof Date ? entry.setAt.toLocaleString() : String(entry.setAt);
+        entry.setAt instanceof Date
+          ? `<t:${Math.floor(entry.setAt.getTime() / 1000)}:F>`
+          : String(entry.setAt);
       const userDisplay = entry.setByUsername ?? entry.setByUserId ?? "unknown user";
-      return `• [${timestamp}] ${entry.activityName} (set by ${userDisplay})`;
+      return `• ${timestamp} ${entry.activityName} (set by ${userDisplay})`;
     });
 
     const header = `Last ${entries.length} presence entr${

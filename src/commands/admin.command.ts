@@ -24,7 +24,6 @@ import {
   sanitizeUserInput,
 } from "../functions/InteractionUtils.js";
 import {
-  formatVoteDateForDisplay,
   parseVoteDateInput,
 } from "../functions/VoteDateUtils.js";
 import { bot } from "../RPGClub_GameDB.js";
@@ -127,10 +126,11 @@ export class Admin {
       }
 
       await BotVotingInfo.updateNextVoteAt(current.roundNumber, parsed);
+      const voteUnix = Math.floor(parsed.getTime() / 1000);
 
       await safeReply(interaction, {
         content:
-          `Next vote date updated to ${formatVoteDateForDisplay(parsed)} (America/New_York).`,
+          `Next vote date updated to <t:${voteUnix}:D> (America/New_York).`,
       });
     } catch (err: any) {
       const msg = err?.message ?? String(err);

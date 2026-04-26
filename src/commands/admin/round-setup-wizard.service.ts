@@ -233,7 +233,9 @@ export async function handleNextRoundSetup(
     }
 
     allActions.push({
-      description: `Set next vote date to ${formatVoteDateForDisplay(finalDate)} (America/New_York)`,
+      description:
+        `Set next vote date to <t:${Math.floor(finalDate.getTime() / 1000)}:D> ` +
+        "(America/New_York)",
       execute: async () => {
         if (testMode) {
           await wizardLog("[Test] Would set round info.");

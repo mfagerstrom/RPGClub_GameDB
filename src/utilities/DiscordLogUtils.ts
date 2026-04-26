@@ -9,20 +9,6 @@ export async function resolveLogChannel(client: Client): Promise<any | null> {
 }
 
 export function formatTimestampWithDay(timestamp: number | null | undefined): string {
-  const date = new Date(timestamp ?? Date.now());
-  const now = new Date();
-  const timeLabel = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  const isSameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-  if (isSameDay) {
-    return `Today at ${timeLabel}`;
-  }
-  const dateLabel = date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${dateLabel} at ${timeLabel}`;
+  const unixSeconds = Math.floor((timestamp ?? Date.now()) / 1000);
+  return `<t:${unixSeconds}:F>`;
 }

@@ -22,8 +22,8 @@ function formatMessageContent(message: Message): string {
 }
 
 function formatTimestamp(timestamp: number | null | undefined): string {
-  const date = new Date(timestamp ?? Date.now());
-  return date.toLocaleString("en-US");
+  const unixSeconds = Math.floor((timestamp ?? Date.now()) / 1000);
+  return `<t:${unixSeconds}:F>`;
 }
 
 function buildAuthorEmbed(

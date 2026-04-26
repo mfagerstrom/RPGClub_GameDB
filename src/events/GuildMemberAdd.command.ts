@@ -4,6 +4,10 @@ import { Discord, On } from "discordx";
 import { formatTimestampWithDay } from "../utilities/DiscordLogUtils.js";
 import { JOIN_LEAVE_LOG_CHANNEL_ID } from "../config/channels.js";
 
+function formatDiscordDateTime(date: Date): string {
+  return `<t:${Math.floor(date.getTime() / 1000)}:F>`;
+}
+
 async function resolveLogChannel(client: Client): Promise<any | null> {
   const channel = await client.channels.fetch(JOIN_LEAVE_LOG_CHANNEL_ID).catch(() => null);
   if (!channel || !channel.isTextBased()) return null;
@@ -31,7 +35,7 @@ export class GuildMemberAdd {
             { name: "User", value: `<@${member.user.id}>\n${username}` },
             {
               name: "Account Created On",
-              value: member.user.createdAt.toLocaleString("en-US"),
+              value: formatDiscordDateTime(member.user.createdAt),
             },
           )
           .setFooter({

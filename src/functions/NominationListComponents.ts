@@ -264,7 +264,7 @@ function trimReason(reason: string): string {
 }
 
 function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", { timeZone: "America/New_York" });
+  return `<t:${Math.floor(date.getTime() / 1000)}:D>`;
 }
 
 async function buildNominationAttachments(

@@ -12,7 +12,7 @@ async function resolveLogChannel(client: Client, channelId: string): Promise<any
 }
 
 function formatAccountCreated(date: Date): string {
-  return date.toLocaleString("en-US");
+  return `<t:${Math.floor(date.getTime() / 1000)}:F>`;
 }
 
 function buildBanEmbed(
