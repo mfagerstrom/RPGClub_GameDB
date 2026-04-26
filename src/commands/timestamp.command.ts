@@ -316,7 +316,7 @@ function parseFromFormats(input: string, zone: string, formats: string[]): DateT
 
 function parseTimeForDate(timeInput: string, baseDate: DateTime): DateTime | null {
   for (const format of TIME_ONLY_FORMATS) {
-    const parsed = DateTime.fromFormat(timeInput, format, { zone: baseDate.zoneName });
+    const parsed = DateTime.fromFormat(timeInput, format, { zone: baseDate.zone });
     if (!parsed.isValid) {
       continue;
     }
