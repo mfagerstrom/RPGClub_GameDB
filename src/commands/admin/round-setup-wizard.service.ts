@@ -1,15 +1,18 @@
 import type { CommandInteraction, StringSelectMenuInteraction } from "discord.js";
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
   EmbedBuilder,
+  ForumChannel,
   StringSelectMenuBuilder,
   type Message,
+  type MessageCreateOptions,
 } from "discord.js";
 import { safeReply } from "../../functions/InteractionUtils.js";
-import { ADMIN_CHANNEL_ID } from "../../config/channels.js";
+import { ADMIN_CHANNEL_ID, NOW_PLAYING_FORUM_ID } from "../../config/channels.js";
 import Gotm, { insertGotmRoundInDatabase, type IGotmGame } from "../../classes/Gotm.js";
 import NrGotm, { insertNrGotmRoundInDatabase, type INrGotmGame } from "../../classes/NrGotm.js";
 import BotVotingInfo from "../../classes/BotVotingInfo.js";
@@ -25,6 +28,9 @@ import {
   type INextRoundWizardState,
 } from "../../classes/AdminWizardSession.js";
 import { listNominationsForRound } from "../../classes/Nomination.js";
+import Game from "../../classes/Game.js";
+import { getThreadsByGameId, setThreadGameLink, upsertThreadRecord } from "../../classes/Thread.js";
+import { GOTM_FORUM_TAG_ID, NR_GOTM_FORUM_TAG_ID } from "../../config/tags.js";
 import {
   buildNominationPreviewLine,
   mapSelectedNominationsToRoundPayloads,
@@ -71,6 +77,63 @@ function buildNominationCountPreview(
     return `${index + 1}. ${option.gameTitle} (GameDB ${option.gamedbGameId}) - ${nominators}`;
   });
   return `**${kindLabel} nomination pool (${options.length})**\n${lines.join("\n")}`;
+}
+
+async function ensureWinnerThreadLinked(params: {
+  interaction: CommandInteraction;
+  gameId: number;
+  gameTitle: string;
+  roundNumber: number;
+  kindLabel: "GOTM" | "NR-GOTM";
+}): Promise<string | null> {
+  const existingThreads = await getThreadsByGameId(params.gameId);
+  if (existingThreads.length > 0) {
+    return existingThreads[0] ?? null;
+  }
+
+  const forum = (await params.interaction.guild?.channels.fetch(
+    NOW_PLAYING_FORUM_ID,
+  )) as ForumChannel | null;
+  if (!forum) {
+    throw new Error("Now Playing forum channel was not found.");
+  }
+
+  const game = await Game.getGameById(params.gameId);
+  if (!game) {
+    throw new Error(`GameDB game ${params.gameId} not found while creating thread.`);
+  }
+
+  const threadTitle = `${params.gameTitle} [${params.kindLabel} Round ${params.roundNumber}]`;
+  const files = game.imageData
+    ? [new AttachmentBuilder(game.imageData, { name: `gamedb_${params.gameId}.png` })]
+    : [];
+  const messagePayload: MessageCreateOptions = {
+    allowedMentions: { parse: [] },
+  };
+  if (files.length) {
+    messagePayload.files = files;
+  } else {
+    messagePayload.content = "Cover image unavailable for this game.";
+  }
+
+  const appliedTags =
+    params.kindLabel === "GOTM" ? [GOTM_FORUM_TAG_ID] : [NR_GOTM_FORUM_TAG_ID];
+  const thread = await forum.threads.create({
+    name: threadTitle,
+    message: messagePayload,
+    appliedTags,
+  });
+  await upsertThreadRecord({
+    threadId: thread.id,
+    forumChannelId: thread.parentId ?? NOW_PLAYING_FORUM_ID,
+    threadName: thread.name ?? threadTitle,
+    isArchived: Boolean(thread.archived),
+    createdAt: thread.createdAt ?? new Date(),
+    lastSeenAt: null,
+    skipLinking: "Y",
+  });
+  await setThreadGameLink(thread.id, params.gameId);
+  return thread.id;
 }
 
 async function promptSelectNomination(
@@ -666,6 +729,18 @@ export async function handleNextRoundSetup(
           await wizardLog("[Test] Would insert GOTM round.");
           return;
         }
+        for (const game of gotmGames) {
+          const threadId = await ensureWinnerThreadLinked({
+            interaction,
+            gameId: game.gamedbGameId,
+            gameTitle: game.title,
+            roundNumber: nextRound,
+            kindLabel: "GOTM",
+          });
+          if (threadId) {
+            await wizardLog(`Linked GOTM thread <#${threadId}> for "${game.title}".`);
+          }
+        }
         await insertGotmRoundInDatabase(nextRound, monthYear, gotmGames);
         Gotm.addRound(nextRound, monthYear, gotmGames);
       },
@@ -680,6 +755,18 @@ export async function handleNextRoundSetup(
         if (!nrGotmGames.length) {
           await wizardLog("Skipping NR-GOTM insert (0 games selected).");
           return;
+        }
+        for (const game of nrGotmGames) {
+          const threadId = await ensureWinnerThreadLinked({
+            interaction,
+            gameId: game.gamedbGameId,
+            gameTitle: game.title,
+            roundNumber: nextRound,
+            kindLabel: "NR-GOTM",
+          });
+          if (threadId) {
+            await wizardLog(`Linked NR-GOTM thread <#${threadId}> for "${game.title}".`);
+          }
         }
         const insertedIds = await insertNrGotmRoundInDatabase(nextRound, monthYear, nrGotmGames);
         const withIds = nrGotmGames.map((entry, index) => ({ ...entry, id: insertedIds[index] ?? null }));
