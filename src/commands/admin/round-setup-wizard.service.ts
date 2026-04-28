@@ -873,6 +873,49 @@ export async function handleNextRoundSetup(
       .map((game, index) => `${index + 1}. ${game.title} (GameDB ${game.gamedbGameId})`)
       .join("\n");
     const actionLines = allActions.map((action, index) => `${index + 1}. ${action.description}`).join("\n");
+    let threadPlanSection = "";
+    if (testMode) {
+      const threadPlanLines: string[] = [];
+      for (const game of gotmGames) {
+        const plan = await planWinnerThread({
+          gameId: game.gamedbGameId,
+          gameTitle: game.title,
+          roundNumber: nextRound,
+          kindLabel: "GOTM",
+        });
+        if (plan.existingThreadId) {
+          threadPlanLines.push(
+            `- GOTM ${game.title}: existing <#${plan.existingThreadId}>`,
+          );
+        } else {
+          threadPlanLines.push(
+            `- GOTM ${game.title}: would create "${plan.title}" | ` +
+            `tag ${plan.tagId} | ` +
+            `cover ${plan.hasCoverImage ? "available" : "missing"}`,
+          );
+        }
+      }
+      for (const game of nrGotmGames) {
+        const plan = await planWinnerThread({
+          gameId: game.gamedbGameId,
+          gameTitle: game.title,
+          roundNumber: nextRound,
+          kindLabel: "NR-GOTM",
+        });
+        if (plan.existingThreadId) {
+          threadPlanLines.push(
+            `- NR-GOTM ${game.title}: existing <#${plan.existingThreadId}>`,
+          );
+        } else {
+          threadPlanLines.push(
+            `- NR-GOTM ${game.title}: would create "${plan.title}" | ` +
+            `tag ${plan.tagId} | ` +
+            `cover ${plan.hasCoverImage ? "available" : "missing"}`,
+          );
+        }
+      }
+      threadPlanSection = `\n\n**Thread Plan (Test Mode)**\n${threadPlanLines.join("\n")}`;
+    }
     await updateEmbed(
       `\n**Summary**\n` +
       `Month label: **${monthYear}**\n` +
@@ -880,7 +923,8 @@ export async function handleNextRoundSetup(
       `Test mode: **${testMode ? "ON" : "OFF"}**\n\n` +
       `**Selected GOTM**\n${gotmSummary}\n\n` +
       `**Selected NR-GOTM**\n${nrSummary}\n\n` +
-      `**DB Actions**\n${actionLines}`,
+      `**DB Actions**\n${actionLines}` +
+      threadPlanSection,
     );
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
