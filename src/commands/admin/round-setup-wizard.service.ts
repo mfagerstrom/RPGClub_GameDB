@@ -42,6 +42,12 @@ function buildPickCountOptions(max: number): PromptChoiceOption[] {
   return buildNumberChoiceOptions(1, capped);
 }
 
+function buildPickCountOptionsWithMin(min: number, max: number): PromptChoiceOption[] {
+  const safeMin = Math.max(0, min);
+  const safeMax = Math.max(safeMin, Math.min(10, max));
+  return buildNumberChoiceOptions(safeMin, safeMax);
+}
+
 function buildSelectionOptions(
   options: WizardNominationOption[],
   pickedIds: number[],
@@ -323,11 +329,39 @@ export async function handleNextRoundSetup(
     await wizardLog(`Error loading data: ${err?.message ?? String(err)}`);
     return;
   }
-  const nextRound = allEntries.length > 0 ? Math.max(...allEntries.map((e: any) => e.round)) + 1 : 1;
-  await persistWizardState({ roundNumber: nextRound, step: "start" });
-  await wizardLog(`**Starting setup for Round ${nextRound}.**`);
+  const computedNextRound =
+    allEntries.length > 0 ? Math.max(...allEntries.map((e: any) => e.round)) + 1 : 1;
+  let nextRound = computedNextRound;
 
-  if (Gotm.getByRound(nextRound).length > 0 || NrGotm.getByRound(nextRound).length > 0) {
+  if (testMode) {
+    const roundChoice = await wizardChoice(
+      `Test mode: which round's nomination data should be used? (Default: ${computedNextRound})`,
+      addCancelOption([
+        { label: `Use ${computedNextRound}`, value: "default", style: ButtonStyle.Primary },
+        { label: "Enter Round", value: "custom" },
+      ]),
+    );
+    if (!roundChoice) return;
+    if (roundChoice === "custom") {
+      const roundInput = await wizardPrompt("Enter the round number to load nominations from.");
+      if (!roundInput) return;
+      const parsedRound = Number(roundInput.trim());
+      if (!Number.isInteger(parsedRound) || parsedRound <= 0) {
+        await wizardLog("Invalid round number. Cancelling.");
+        await closeWizardState("cancelled");
+        return;
+      }
+      nextRound = parsedRound;
+    }
+  }
+
+  await persistWizardState({ roundNumber: nextRound, step: "start" });
+  await wizardLog(
+    `**Starting setup for Round ${nextRound}.**` +
+    (testMode ? " (Test mode data source)" : ""),
+  );
+
+  if (!testMode && (Gotm.getByRound(nextRound).length > 0 || NrGotm.getByRound(nextRound).length > 0)) {
     await wizardLog(
       `Round ${nextRound} already exists in GOTM and/or NR-GOTM data. ` +
       "Use edit commands or choose another round.",
@@ -356,14 +390,18 @@ export async function handleNextRoundSetup(
     );
   }
 
-  if (!gotmOptions.length || !nrOptions.length) {
+  if (!gotmOptions.length) {
     await wizardLog(
-      `No eligible nominations for Round ${nextRound}. ` +
+      `No eligible GOTM nominations for Round ${nextRound}. ` +
       `Eligible GOTM: ${gotmOptions.length}, eligible NR-GOTM: ${nrOptions.length}. ` +
       "Run /nominate to add or fix nominations, then rerun /admin nextround-setup.",
     );
     await closeWizardState("cancelled");
     return;
+  }
+
+  if (!nrOptions.length) {
+    await wizardLog("No eligible NR-GOTM nominations found. Continuing with 0 NR-GOTM picks.");
   }
 
   let gotmGames: IGotmGame[] = [];
@@ -445,8 +483,8 @@ export async function handleNextRoundSetup(
     let nrPickCount = wizardState.nrPickCount ?? null;
     if (!nrPickCount || nrPickCount > nrOptions.length) {
       const nrCountChoice = await wizardChoice(
-        `How many NR-GOTM winners? (${nrOptions.length} eligible)`,
-        addCancelOption(buildPickCountOptions(nrOptions.length)),
+        `How many NR-GOTM winners? (${nrOptions.length} eligible, 0 allowed)`,
+        addCancelOption(buildPickCountOptionsWithMin(0, nrOptions.length)),
       );
       if (!nrCountChoice) return;
       nrPickCount = Number(nrCountChoice);
@@ -455,7 +493,7 @@ export async function handleNextRoundSetup(
         selectedNrGotmOrder: [],
       });
     }
-    if (!Number.isInteger(nrPickCount) || nrPickCount <= 0) {
+    if (!Number.isInteger(nrPickCount) || nrPickCount < 0) {
       await wizardLog("Invalid NR-GOTM pick count.");
       await closeWizardState("cancelled");
       return;
@@ -586,6 +624,10 @@ export async function handleNextRoundSetup(
       execute: async () => {
         if (testMode) {
           await wizardLog("[Test] Would insert NR-GOTM round.");
+          return;
+        }
+        if (!nrGotmGames.length) {
+          await wizardLog("Skipping NR-GOTM insert (0 games selected).");
           return;
         }
         const insertedIds = await insertNrGotmRoundInDatabase(nextRound, monthYear, nrGotmGames);
