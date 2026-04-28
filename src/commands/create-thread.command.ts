@@ -7,6 +7,7 @@ import type {
 import { ApplicationCommandOptionType, AttachmentBuilder, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashOption } from "discordx";
 import Game from "../classes/Game.js";
+import { getThreadsByGameId } from "../classes/Thread.js";
 import { NOW_PLAYING_FORUM_ID } from "../config/channels.js";
 import { safeDeferReply, safeReply, sanitizeOptionalInput, sanitizeUserInput } from
   "../functions/InteractionUtils.js";
@@ -105,6 +106,16 @@ export class CreateThreadCommand {
     if (!game) {
       await safeReply(interaction, {
         content: `Could not find GameDB game #${gameId}.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const existingThreads = await getThreadsByGameId(gameId);
+    const existingThreadId = existingThreads[0] ?? null;
+    if (existingThreadId) {
+      await safeReply(interaction, {
+        content: `A thread is already linked for "${game.title}": <#${existingThreadId}>`,
         flags: MessageFlags.Ephemeral,
       });
       return;
