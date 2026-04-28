@@ -7,7 +7,7 @@ import type {
 import { ApplicationCommandOptionType, AttachmentBuilder, MessageFlags } from "discord.js";
 import { Discord, Slash, SlashOption } from "discordx";
 import Game from "../classes/Game.js";
-import { getThreadsByGameId } from "../classes/Thread.js";
+import { getThreadsByGameId, setThreadGameLink, upsertThreadRecord } from "../classes/Thread.js";
 import { NOW_PLAYING_FORUM_ID } from "../config/channels.js";
 import { safeDeferReply, safeReply, sanitizeOptionalInput, sanitizeUserInput } from
   "../functions/InteractionUtils.js";
@@ -165,6 +165,16 @@ export class CreateThreadCommand {
       message: messagePayload,
       name: game.title.slice(0, 100),
     });
+    await upsertThreadRecord({
+      createdAt: thread.createdAt ?? new Date(),
+      forumChannelId: thread.parentId ?? NOW_PLAYING_FORUM_ID,
+      isArchived: Boolean(thread.archived),
+      lastSeenAt: null,
+      skipLinking: "Y",
+      threadId: thread.id,
+      threadName: thread.name ?? game.title.slice(0, 100),
+    });
+    await setThreadGameLink(thread.id, game.id);
 
     await safeReply(interaction, {
       content: `Created thread <#${thread.id}> for "${game.title}" with tag "${selectedTag.name}".`,
