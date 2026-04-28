@@ -235,6 +235,15 @@ export async function saveAdminWizardSession(params: {
     const stateJson = serializeNextRoundWizardState(normalizedState);
     const now = new Date();
 
+    const uniqueSessionId = [
+      "wiz",
+      params.commandKey,
+      params.ownerUserId,
+      params.channelId,
+      Date.now().toString(),
+      Math.floor(Math.random() * 1_000_000).toString(),
+    ].join("-");
+
     await connection.execute(
       `MERGE INTO RPG_CLUB_ADMIN_WIZARD_SESSIONS t
         USING (
@@ -274,7 +283,7 @@ export async function saveAdminWizardSession(params: {
         guildId: params.guildId ?? null,
         stateJson,
         lastUpdatedAt: now,
-        sessionId: `wiz-${params.commandKey}-${params.ownerUserId}-${params.channelId}`,
+        sessionId: uniqueSessionId,
       },
       { autoCommit: true },
     );
