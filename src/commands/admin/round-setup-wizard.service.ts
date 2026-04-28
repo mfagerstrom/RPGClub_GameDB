@@ -136,6 +136,31 @@ async function ensureWinnerThreadLinked(params: {
   return { threadId: thread.id, created: true };
 }
 
+async function planWinnerThread(params: {
+  gameId: number;
+  gameTitle: string;
+  roundNumber: number;
+  kindLabel: "GOTM" | "NR-GOTM";
+}): Promise<{
+  existingThreadId: string | null;
+  title: string;
+  tagId: string;
+  hasCoverImage: boolean;
+}> {
+  const existingThreads = await getThreadsByGameId(params.gameId);
+  const existingThreadId = existingThreads[0] ?? null;
+  const game = await Game.getGameById(params.gameId);
+  const title = `${params.gameTitle} [${params.kindLabel} Round ${params.roundNumber}]`;
+  const tagId = params.kindLabel === "GOTM" ? GOTM_FORUM_TAG_ID : NR_GOTM_FORUM_TAG_ID;
+  const hasCoverImage = Boolean(game?.imageData);
+  return {
+    existingThreadId,
+    title,
+    tagId,
+    hasCoverImage,
+  };
+}
+
 async function promptSelectNomination(
   channel: any,
   userId: string,
@@ -727,6 +752,27 @@ export async function handleNextRoundSetup(
       execute: async () => {
         if (testMode) {
           await wizardLog("[Test] Would insert GOTM round.");
+          for (const game of gotmGames) {
+            const plan = await planWinnerThread({
+              gameId: game.gamedbGameId,
+              gameTitle: game.title,
+              roundNumber: nextRound,
+              kindLabel: "GOTM",
+            });
+            if (plan.existingThreadId) {
+              await wizardLog(
+                `[Test] Existing GOTM thread found for "${game.title}": ` +
+                `<#${plan.existingThreadId}>.`,
+              );
+            } else {
+              await wizardLog(
+                `[Test] Would create GOTM thread for "${game.title}" | ` +
+                `Title: "${plan.title}" | ` +
+                `Tag: ${plan.tagId} | ` +
+                `Cover image: ${plan.hasCoverImage ? "available" : "missing"}.`,
+              );
+            }
+          }
           return;
         }
         for (const game of gotmGames) {
@@ -754,6 +800,27 @@ export async function handleNextRoundSetup(
       execute: async () => {
         if (testMode) {
           await wizardLog("[Test] Would insert NR-GOTM round.");
+          for (const game of nrGotmGames) {
+            const plan = await planWinnerThread({
+              gameId: game.gamedbGameId,
+              gameTitle: game.title,
+              roundNumber: nextRound,
+              kindLabel: "NR-GOTM",
+            });
+            if (plan.existingThreadId) {
+              await wizardLog(
+                `[Test] Existing NR-GOTM thread found for "${game.title}": ` +
+                `<#${plan.existingThreadId}>.`,
+              );
+            } else {
+              await wizardLog(
+                `[Test] Would create NR-GOTM thread for "${game.title}" | ` +
+                `Title: "${plan.title}" | ` +
+                `Tag: ${plan.tagId} | ` +
+                `Cover image: ${plan.hasCoverImage ? "available" : "missing"}.`,
+              );
+            }
+          }
           return;
         }
         if (!nrGotmGames.length) {
