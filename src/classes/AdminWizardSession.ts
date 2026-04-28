@@ -310,6 +310,23 @@ export async function closeActiveAdminWizardSession(params: {
 }): Promise<boolean> {
   const connection = await getOraclePool().getConnection();
   try {
+    // The unique index includes STATUS, so ensure we do not collide when promoting
+    // ACTIVE -> CANCELLED/COMPLETED if a prior historical row already exists.
+    await connection.execute(
+      `DELETE FROM RPG_CLUB_ADMIN_WIZARD_SESSIONS
+        WHERE COMMAND_KEY = :commandKey
+          AND OWNER_USER_ID = :ownerUserId
+          AND CHANNEL_ID = :channelId
+          AND STATUS = :status`,
+      {
+        commandKey: params.commandKey,
+        ownerUserId: params.ownerUserId,
+        channelId: params.channelId,
+        status: toDbStatus(params.status),
+      },
+      { autoCommit: true },
+    );
+
     const result = await connection.execute(
       `UPDATE RPG_CLUB_ADMIN_WIZARD_SESSIONS
           SET STATUS = :status,
