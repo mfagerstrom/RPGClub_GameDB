@@ -144,19 +144,19 @@ async function planWinnerThread(params: {
 }): Promise<{
   existingThreadId: string | null;
   title: string;
-  tagId: string;
+  tagLabel: string;
   hasCoverImage: boolean;
 }> {
   const existingThreads = await getThreadsByGameId(params.gameId);
   const existingThreadId = existingThreads[0] ?? null;
   const game = await Game.getGameById(params.gameId);
   const title = `${params.gameTitle} [${params.kindLabel} Round ${params.roundNumber}]`;
-  const tagId = params.kindLabel === "GOTM" ? GOTM_FORUM_TAG_ID : NR_GOTM_FORUM_TAG_ID;
+  const tagLabel = params.kindLabel;
   const hasCoverImage = Boolean(game?.imageData);
   return {
     existingThreadId,
     title,
-    tagId,
+    tagLabel,
     hasCoverImage,
   };
 }
@@ -768,7 +768,7 @@ export async function handleNextRoundSetup(
               await wizardLog(
                 `[Test] Would create GOTM thread for "${game.title}" | ` +
                 `Title: "${plan.title}" | ` +
-                `Tag: ${plan.tagId} | ` +
+                `Tag: ${plan.tagLabel} | ` +
                 `Cover image: ${plan.hasCoverImage ? "available" : "missing"}.`,
               );
             }
@@ -816,7 +816,7 @@ export async function handleNextRoundSetup(
               await wizardLog(
                 `[Test] Would create NR-GOTM thread for "${game.title}" | ` +
                 `Title: "${plan.title}" | ` +
-                `Tag: ${plan.tagId} | ` +
+                `Tag: ${plan.tagLabel} | ` +
                 `Cover image: ${plan.hasCoverImage ? "available" : "missing"}.`,
               );
             }
@@ -890,7 +890,7 @@ export async function handleNextRoundSetup(
         } else {
           threadPlanLines.push(
             `- GOTM ${game.title}: would create "${plan.title}" | ` +
-            `tag ${plan.tagId} | ` +
+            `tag ${plan.tagLabel} | ` +
             `cover ${plan.hasCoverImage ? "available" : "missing"}`,
           );
         }
@@ -909,7 +909,7 @@ export async function handleNextRoundSetup(
         } else {
           threadPlanLines.push(
             `- NR-GOTM ${game.title}: would create "${plan.title}" | ` +
-            `tag ${plan.tagId} | ` +
+            `tag ${plan.tagLabel} | ` +
             `cover ${plan.hasCoverImage ? "available" : "missing"}`,
           );
         }
