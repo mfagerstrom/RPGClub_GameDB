@@ -103,7 +103,9 @@ async function promptSelectNomination(
     }) as StringSelectMenuInteraction;
     const pickedValue = Number(component.values?.[0] ?? "");
     await component.deferUpdate().catch(() => {});
-    await promptMessage.edit({ components: [] }).catch(() => {});
+    await promptMessage.delete().catch(async () => {
+      await promptMessage.edit({ components: [] }).catch(() => {});
+    });
     if (!Number.isInteger(pickedValue) || pickedValue <= 0) {
       return null;
     }
@@ -117,7 +119,9 @@ async function promptSelectNomination(
     if (cancel) {
       await cancel.deferUpdate().catch(() => {});
     }
-    await promptMessage.edit({ components: [] }).catch(() => {});
+    await promptMessage.delete().catch(async () => {
+      await promptMessage.edit({ components: [] }).catch(() => {});
+    });
     return null;
   }
 }
@@ -243,7 +247,9 @@ export async function handleNextRoundSetup(
       await selection.deferUpdate().catch(() => {});
       const value = selection.customId.slice(promptId.length + 1);
       const chosenLabel = options.find((opt) => opt.value === value)?.label ?? value;
-      await promptMessage.edit({ components: [] }).catch(() => {});
+      await promptMessage.delete().catch(async () => {
+        await promptMessage.edit({ components: [] }).catch(() => {});
+      });
       await updateEmbed(`> *${chosenLabel}*`);
       if (value === "cancel") {
         await updateEmbed("❌ Cancelled by user.");
@@ -252,7 +258,9 @@ export async function handleNextRoundSetup(
       }
       return value;
     } catch {
-      await promptMessage.edit({ components: [] }).catch(() => {});
+      await promptMessage.delete().catch(async () => {
+        await promptMessage.edit({ components: [] }).catch(() => {});
+      });
       await updateEmbed("❌ Timed out waiting for a selection.");
       await closeWizardState("cancelled");
       return null;
@@ -435,6 +443,11 @@ export async function handleNextRoundSetup(
     const selectedGotmIds = wizardState.selectedGotmNominationIds
       .filter((id) => gotmOptions.some((opt) => opt.nominationId === id))
       .slice(0, gotmPickCount);
+    if (gotmPickCount === gotmOptions.length && selectedGotmIds.length === 0) {
+      selectedGotmIds.push(...gotmOptions.map((opt) => opt.nominationId));
+      await persistWizardState({ selectedGotmNominationIds: selectedGotmIds });
+      await wizardLog("GOTM nominations equal winner count. Auto-selected all GOTM nominations.");
+    }
     while (selectedGotmIds.length < gotmPickCount) {
       const options = buildSelectionOptions(gotmOptions, selectedGotmIds);
       if (!options.length) {
@@ -460,6 +473,12 @@ export async function handleNextRoundSetup(
 
     await persistWizardState({ step: "gotm-order" });
     const gotmOrder = normalizeOrder(selectedGotmIds, wizardState.selectedGotmOrder);
+    if (selectedGotmIds.length === gotmPickCount && gotmPickCount === gotmOptions.length) {
+      gotmOrder.length = 0;
+      gotmOrder.push(...selectedGotmIds);
+      await persistWizardState({ selectedGotmOrder: gotmOrder });
+      await wizardLog("GOTM order auto-set from nomination list.");
+    }
     while (gotmOrder.length < selectedGotmIds.length) {
       const remaining = selectedGotmIds.filter((id) => !gotmOrder.includes(id));
       const pickedId = await promptOrderNomination(
@@ -504,6 +523,15 @@ export async function handleNextRoundSetup(
     const selectedNrIds = wizardState.selectedNrGotmNominationIds
       .filter((id) => nrOptions.some((opt) => opt.nominationId === id))
       .slice(0, nrPickCount);
+    if (
+      nrPickCount > 0 &&
+      nrPickCount === nrOptions.length &&
+      selectedNrIds.length === 0
+    ) {
+      selectedNrIds.push(...nrOptions.map((opt) => opt.nominationId));
+      await persistWizardState({ selectedNrGotmNominationIds: selectedNrIds });
+      await wizardLog("NR-GOTM nominations equal winner count. Auto-selected all NR-GOTM nominations.");
+    }
     while (selectedNrIds.length < nrPickCount) {
       const options = buildSelectionOptions(nrOptions, selectedNrIds);
       if (!options.length) {
@@ -529,6 +557,16 @@ export async function handleNextRoundSetup(
 
     await persistWizardState({ step: "nr-order" });
     const nrOrder = normalizeOrder(selectedNrIds, wizardState.selectedNrGotmOrder);
+    if (
+      nrPickCount > 0 &&
+      selectedNrIds.length === nrPickCount &&
+      nrPickCount === nrOptions.length
+    ) {
+      nrOrder.length = 0;
+      nrOrder.push(...selectedNrIds);
+      await persistWizardState({ selectedNrGotmOrder: nrOrder });
+      await wizardLog("NR-GOTM order auto-set from nomination list.");
+    }
     while (nrOrder.length < selectedNrIds.length) {
       const remaining = selectedNrIds.filter((id) => !nrOrder.includes(id));
       const pickedId = await promptOrderNomination(
