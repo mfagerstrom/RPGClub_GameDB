@@ -85,10 +85,10 @@ async function ensureWinnerThreadLinked(params: {
   gameTitle: string;
   roundNumber: number;
   kindLabel: "GOTM" | "NR-GOTM";
-}): Promise<string | null> {
+}): Promise<{ threadId: string | null; created: boolean }> {
   const existingThreads = await getThreadsByGameId(params.gameId);
   if (existingThreads.length > 0) {
-    return existingThreads[0] ?? null;
+    return { threadId: existingThreads[0] ?? null, created: false };
   }
 
   const forum = (await params.interaction.guild?.channels.fetch(
@@ -133,7 +133,7 @@ async function ensureWinnerThreadLinked(params: {
     skipLinking: "Y",
   });
   await setThreadGameLink(thread.id, params.gameId);
-  return thread.id;
+  return { threadId: thread.id, created: true };
 }
 
 async function promptSelectNomination(
@@ -730,15 +730,19 @@ export async function handleNextRoundSetup(
           return;
         }
         for (const game of gotmGames) {
-          const threadId = await ensureWinnerThreadLinked({
+          const threadResult = await ensureWinnerThreadLinked({
             interaction,
             gameId: game.gamedbGameId,
             gameTitle: game.title,
             roundNumber: nextRound,
             kindLabel: "GOTM",
           });
-          if (threadId) {
-            await wizardLog(`Linked GOTM thread <#${threadId}> for "${game.title}".`);
+          if (threadResult.threadId && threadResult.created) {
+            await wizardLog(`Linked GOTM thread <#${threadResult.threadId}> for "${game.title}".`);
+          } else if (threadResult.threadId) {
+            await wizardLog(`Existing GOTM thread found for "${game.title}": <#${threadResult.threadId}>.`);
+          } else {
+            await wizardLog(`Checked GOTM thread link for "${game.title}" (none found and none created).`);
           }
         }
         await insertGotmRoundInDatabase(nextRound, monthYear, gotmGames);
@@ -757,15 +761,19 @@ export async function handleNextRoundSetup(
           return;
         }
         for (const game of nrGotmGames) {
-          const threadId = await ensureWinnerThreadLinked({
+          const threadResult = await ensureWinnerThreadLinked({
             interaction,
             gameId: game.gamedbGameId,
             gameTitle: game.title,
             roundNumber: nextRound,
             kindLabel: "NR-GOTM",
           });
-          if (threadId) {
-            await wizardLog(`Linked NR-GOTM thread <#${threadId}> for "${game.title}".`);
+          if (threadResult.threadId && threadResult.created) {
+            await wizardLog(`Linked NR-GOTM thread <#${threadResult.threadId}> for "${game.title}".`);
+          } else if (threadResult.threadId) {
+            await wizardLog(`Existing NR-GOTM thread found for "${game.title}": <#${threadResult.threadId}>.`);
+          } else {
+            await wizardLog(`Checked NR-GOTM thread link for "${game.title}" (none found and none created).`);
           }
         }
         const insertedIds = await insertNrGotmRoundInDatabase(nextRound, monthYear, nrGotmGames);
