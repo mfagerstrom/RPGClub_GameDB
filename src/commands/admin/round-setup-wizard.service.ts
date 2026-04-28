@@ -62,6 +62,17 @@ function buildSelectionOptions(
     }));
 }
 
+function buildNominationCountPreview(
+  kindLabel: "GOTM" | "NR-GOTM",
+  options: WizardNominationOption[],
+): string {
+  const lines = options.map((option, index) => {
+    const nominators = option.userIds.map((userId) => `<@${userId}>`).join(", ");
+    return `${index + 1}. ${option.gameTitle} (GameDB ${option.gamedbGameId}) - ${nominators}`;
+  });
+  return `**${kindLabel} nomination pool (${options.length})**\n${lines.join("\n")}`;
+}
+
 async function promptSelectNomination(
   channel: any,
   userId: string,
@@ -421,6 +432,7 @@ export async function handleNextRoundSetup(
     await persistWizardState({ step: "gotm-count" });
     let gotmPickCount = wizardState.gotmPickCount ?? null;
     if (!gotmPickCount || gotmPickCount > gotmOptions.length) {
+      await updateEmbed(buildNominationCountPreview("GOTM", gotmOptions));
       const gotmCountChoice = await wizardChoice(
         `How many GOTM winners? (${gotmOptions.length} eligible)`,
         addCancelOption(buildPickCountOptions(gotmOptions.length)),
@@ -501,6 +513,7 @@ export async function handleNextRoundSetup(
     await persistWizardState({ step: "nr-count" });
     let nrPickCount = wizardState.nrPickCount ?? null;
     if (!nrPickCount || nrPickCount > nrOptions.length) {
+      await updateEmbed(buildNominationCountPreview("NR-GOTM", nrOptions));
       const nrCountChoice = await wizardChoice(
         `How many NR-GOTM winners? (${nrOptions.length} eligible, 0 allowed)`,
         addCancelOption(buildPickCountOptionsWithMin(0, nrOptions.length)),
