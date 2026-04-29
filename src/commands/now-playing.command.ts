@@ -71,6 +71,7 @@ import {
 } from "../commands/profile.command.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 import { STANDARD_PLATFORM_IDS } from "../config/standardPlatforms.js";
+import { composeVoteImage } from "../services/voteImageComposer.js";
 
 const MAX_NOW_PLAYING = 10;
 const MAX_NOW_PLAYING_NOTE_LEN = 500;
@@ -146,6 +147,7 @@ type NowPlayingListContext = {
 };
 const nowPlayingListContexts = new Map<string, NowPlayingListContext>();
 type NowPlayingMessageComponents = Array<ContainerBuilder | ActionRowBuilder<ButtonBuilder>>;
+type NowPlayingListComponents = Array<ContainerBuilder | MediaGalleryBuilder>;
 
 function buildComponentsV2Flags(isEphemeral: boolean): number {
   return (isEphemeral ? MessageFlags.Ephemeral : 0) | COMPONENTS_V2_FLAG;
@@ -2927,16 +2929,26 @@ export class NowPlayingCommand {
   private async buildNowPlayingAttachments(
     entries: IMemberNowPlayingEntry[],
     maxImages: number = Number.POSITIVE_INFINITY,
-  ): Promise<{ files: AttachmentBuilder[]; thumbnailsByGameId: Map<number, string> }> {
+  ): Promise<{
+    files: AttachmentBuilder[];
+    thumbnailsByGameId: Map<number, string>;
+    covers: Array<{ gameId: number; title: string; imageData: Buffer }>;
+  }> {
     const files: AttachmentBuilder[] = [];
     const seen = new Set<number>();
     const thumbnailsByGameId = new Map<number, string>();
+    const covers: Array<{ gameId: number; title: string; imageData: Buffer }> = [];
     let imageCount = 0;
     for (const entry of entries) {
       if (!entry.gameId || seen.has(entry.gameId)) continue;
       seen.add(entry.gameId);
       const game = await Game.getGameById(entry.gameId);
       if (game?.imageData) {
+        covers.push({
+          gameId: entry.gameId,
+          title: entry.title,
+          imageData: game.imageData,
+        });
         if (imageCount >= maxImages) {
           break;
         }
@@ -2948,7 +2960,7 @@ export class NowPlayingCommand {
         imageCount += 1;
       }
     }
-    return { files, thumbnailsByGameId };
+    return { files, thumbnailsByGameId, covers };
   }
 
   private async buildNowPlayingListPayload(
@@ -2958,21 +2970,38 @@ export class NowPlayingCommand {
     title: string,
     isOwnList: boolean,
     isEphemeral: boolean,
-  ): Promise<{ components: ContainerBuilder[]; files: AttachmentBuilder[] }> {
-    const { files, thumbnailsByGameId } = await this.buildNowPlayingAttachments(
+  ): Promise<{ components: NowPlayingListComponents; files: AttachmentBuilder[] }> {
+    const { files, covers } = await this.buildNowPlayingAttachments(
       entries,
       NOW_PLAYING_GALLERY_MAX,
     );
-    const components = this.buildNowPlayingEntryContainers(
+    const components = this.buildNowPlayingEntryComponents(
       title,
       entries,
       guildId,
-      thumbnailsByGameId,
       target.id,
       isOwnList,
       isEphemeral,
+      await this.buildNowPlayingCompositeImageUrl(files, covers),
     );
     return { components, files };
+  }
+
+  private async buildNowPlayingCompositeImageUrl(
+    files: AttachmentBuilder[],
+    covers: Array<{ gameId: number; title: string; imageData: Buffer }>,
+  ): Promise<string | null> {
+    if (!covers.length) {
+      return null;
+    }
+    const imageBuffer = await composeVoteImage({
+      roundNumber: 1,
+      voteType: "GOTM",
+      covers,
+    });
+    const filename = "now_playing_composite.png";
+    files.push(new AttachmentBuilder(imageBuffer, { name: filename }));
+    return `attachment://${filename}`;
   }
 
   private buildNowPlayingActionRow(
@@ -3421,42 +3450,17 @@ export class NowPlayingCommand {
   }
 
 
-  private buildNowPlayingEntryContainers(
+  private buildNowPlayingEntryComponents(
     title: string,
     entries: IMemberNowPlayingEntry[],
     guildId: string | null,
-    thumbnailsByGameId: Map<number, string>,
     ownerId: string,
     isOwnList: boolean,
     isEphemeral: boolean,
-  ): ContainerBuilder[] {
+    imageUrl: string | null,
+  ): NowPlayingListComponents {
     const container = new ContainerBuilder();
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`));
-
-    const galleryItems: MediaGalleryItemBuilder[] = [];
-    for (const entry of entries) {
-      if (galleryItems.length >= NOW_PLAYING_GALLERY_MAX) {
-        break;
-      }
-      if (!entry.gameId) {
-        continue;
-      }
-      const imageUrl = thumbnailsByGameId.get(entry.gameId);
-      if (!imageUrl) {
-        continue;
-      }
-      const item = new MediaGalleryItemBuilder()
-        .setURL(imageUrl)
-        .setDescription(formatEntryTitleWithPlatform(entry));
-      galleryItems.push(item);
-    }
-
-    if (galleryItems.length) {
-      container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(galleryItems));
-      container.addSeparatorComponents(
-        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(false),
-      );
-    }
 
     const showEditButton = isOwnList && isEphemeral;
     entries.forEach((entry, index) => {
@@ -3496,7 +3500,15 @@ export class NowPlayingCommand {
         container.addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
       }
     });
-    return [container];
+    if (!imageUrl) {
+      return [container];
+    }
+    const imageComponent = new MediaGalleryBuilder().addItems(
+      new MediaGalleryItemBuilder()
+        .setURL(imageUrl)
+        .setDescription("Now Playing image"),
+    );
+    return [imageComponent, container];
   }
 
   private trimTextDisplayContent(content: string): string {
