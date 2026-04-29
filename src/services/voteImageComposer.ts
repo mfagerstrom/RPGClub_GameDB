@@ -21,6 +21,8 @@ const TILE_GAP = 5;
 const HEADER_FONT_SIZE_MIN = 96;
 const HEADER_FONT_SIZE_MAX = 220;
 const HEADER_TARGET_WIDTH_RATIO = 0.8;
+const HEADER_SIDE_SAFE_PADDING = 100;
+const HEADER_BOTTOM_SAFE_PADDING = 24;
 
 type GridDimensions = {
   cols: number;
@@ -50,7 +52,8 @@ function resolveGridDimensions(count: number): GridDimensions {
 
 function estimateHeaderFontSize(label: string): number {
   const safeLength = Math.max(1, label.length);
-  const targetWidth = CANVAS_WIDTH * HEADER_TARGET_WIDTH_RATIO;
+  const targetWidth =
+    Math.min(CANVAS_WIDTH * HEADER_TARGET_WIDTH_RATIO, CANVAS_WIDTH - HEADER_SIDE_SAFE_PADDING * 2);
   const estimated = Math.floor(targetWidth / (safeLength * 0.58));
   return Math.max(HEADER_FONT_SIZE_MIN, Math.min(HEADER_FONT_SIZE_MAX, estimated));
 }
@@ -65,8 +68,16 @@ function buildHeaderOverlaySvg(
   const subtitle = "Nominations";
   const dynamicFontSize = estimateHeaderFontSize(plainLabel);
   const subtitleFontSize = Math.max(24, Math.floor(dynamicFontSize * 0.6));
-  const mainY = singleRowLayout ? Math.floor(CANVAS_HEIGHT * 0.84) : Math.floor(CANVAS_HEIGHT * 0.48);
-  const subtitleY = mainY + Math.floor(dynamicFontSize * 0.95);
+  const lineGap = Math.floor(dynamicFontSize * 0.475);
+  const mainYDefault = singleRowLayout
+    ? Math.floor(CANVAS_HEIGHT * 0.84)
+    : Math.floor(CANVAS_HEIGHT * 0.48);
+  const maxSubtitleY =
+    CANVAS_HEIGHT - Math.floor(subtitleFontSize / 2) - HEADER_BOTTOM_SAFE_PADDING;
+  const maxMainY = maxSubtitleY - lineGap;
+  const minMainY = Math.floor(dynamicFontSize / 2) + HEADER_BOTTOM_SAFE_PADDING;
+  const mainY = Math.max(minMainY, Math.min(mainYDefault, maxMainY));
+  const subtitleY = Math.min(maxSubtitleY, mainY + lineGap);
   const svg = `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="headerGlow" x="-50%" y="-50%" width="200%" height="200%">
