@@ -212,7 +212,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     : usableWidth;
 
   const composites: sharp.OverlayOptions[] = [];
-  const tileGap = TILE_GAP;
+  const tileGap = orderedCovers.length === 6 ? TILE_GAP * 3 : TILE_GAP;
   const rowGap = orderedCovers.length === 6 ? 0 : tileGap;
   const tileWidth = custom?.cols === 2
     ? Math.floor((usableWidth - tileGap) / 2)
