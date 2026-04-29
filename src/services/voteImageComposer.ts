@@ -123,6 +123,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const orderedCovers = params.sortByTitle === false
     ? [...params.covers]
     : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
+  const reverseThreeEntryVerticalPattern = orderedCovers.length === 3;
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
   const shouldStaggerRows = orderedCovers.length % 2 === 0 && rows > 1;
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
@@ -189,7 +190,8 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
       const targetTileWidth = tileWidth;
       const targetTileHeight = tileHeight;
       const hasLargeSlack = item.slackX > TILE_GAP || item.slackY > TILE_GAP;
-      const checkerDirection = ((rowIndex + itemIndex) % 2 === 0) ? 1 : -1;
+      const checkerDirection = (((rowIndex + itemIndex) % 2 === 0) ? 1 : -1) *
+        (reverseThreeEntryVerticalPattern ? -1 : 1);
       const maxShiftY = Math.max(0, Math.floor((item.slackY - TILE_GAP) / 2));
       const checkerShiftY = hasLargeSlack ? checkerDirection * maxShiftY : 0;
       const left = baseLeft +
