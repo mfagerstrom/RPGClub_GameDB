@@ -18,26 +18,11 @@ const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
 const OUTER_MARGIN = 5;
 const TILE_GAP = 5;
-const HEADER_FONT_SIZE_MIN = 96;
-const HEADER_FONT_SIZE_MAX = 220;
-const HEADER_TARGET_WIDTH_RATIO = 0.8;
-const HEADER_SIDE_SAFE_PADDING = 100;
-const HEADER_BAR_HEIGHT = 130;
-const HEADER_BAR_GAP = 0;
 
 type GridDimensions = {
   cols: number;
   rows: number;
 };
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("'", "&apos;");
-}
 
 function resolveGridDimensions(count: number): GridDimensions {
   if (count <= 1) return { cols: 1, rows: 1 };
@@ -49,38 +34,6 @@ function resolveGridDimensions(count: number): GridDimensions {
   const cols = Math.max(2, estimatedCols);
   const rows = Math.ceil(count / cols);
   return { cols, rows };
-}
-
-function estimateHeaderFontSize(label: string): number {
-  const safeLength = Math.max(1, label.length);
-  const targetWidth =
-    Math.min(CANVAS_WIDTH * HEADER_TARGET_WIDTH_RATIO, CANVAS_WIDTH - HEADER_SIDE_SAFE_PADDING * 2);
-  const estimated = Math.floor(targetWidth / (safeLength * 0.58));
-  return Math.max(HEADER_FONT_SIZE_MIN, Math.min(HEADER_FONT_SIZE_MAX, estimated));
-}
-
-function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Buffer {
-  const plainLabel = `${voteType} Nominations - Round ${roundNumber}`;
-  const label = escapeXml(`${voteType} Nominations - Round ${roundNumber}`);
-  const dynamicFontSize = Math.min(
-    estimateHeaderFontSize(plainLabel),
-    Math.floor(HEADER_BAR_HEIGHT * 0.58),
-  );
-  const svg = `<svg width="${CANVAS_WIDTH}" height="${HEADER_BAR_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  <text
-    x="${HEADER_SIDE_SAFE_PADDING}"
-    y="50%"
-    text-anchor="start"
-    dominant-baseline="middle"
-    font-family="Arial, Helvetica, sans-serif"
-    font-size="${dynamicFontSize}"
-    font-weight="900"
-    fill="#FFFFFF"
-    stroke="#000000"
-    stroke-width="3">${label}</text>
-</svg>`;
-
-  return Buffer.from(svg);
 }
 
 export async function composeVoteImage(params: IComposeVoteImageParams): Promise<Buffer> {
@@ -96,11 +49,9 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN * 2;
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN * 2;
-  const contentHeightExcludingBar = usableHeight - HEADER_BAR_HEIGHT - HEADER_BAR_GAP;
 
   const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
-  const tileHeight = Math.floor((contentHeightExcludingBar - TILE_GAP * (rows - 1)) / rows);
-  const headerBarTop = CANVAS_HEIGHT - OUTER_MARGIN - HEADER_BAR_HEIGHT;
+  const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
 
   const composites: sharp.OverlayOptions[] = [];
 
@@ -130,12 +81,6 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
       composites.push({ input: resized, left, top });
     }
   }
-
-  composites.push({
-    input: buildHeaderOverlaySvg(params.voteType, params.roundNumber),
-    left: 0,
-    top: headerBarTop,
-  });
 
   return sharp({
     create: {

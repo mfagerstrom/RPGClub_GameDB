@@ -72,7 +72,11 @@ function buildNominationContainers(
 ): Array<ContainerBuilder | ActionRowBuilder<StringSelectMenuBuilder>> {
   const containers: ContainerBuilder[] = [];
   let container = new ContainerBuilder();
+  void altLayout;
   addVoteImageToContainer(container, voteImageUrl);
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(buildHeaderContent(kindLabel, window)),
+  );
   container.addSeparatorComponents(
     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true),
   );
@@ -141,6 +145,13 @@ function buildNominationText(nomination: INominationEntry): string {
     return `### ${nomination.gameTitle}\n<@${nomination.userId}> ${trimReason(nomination.reason)}`;
   }
   return `### ${nomination.gameTitle}\n<@${nomination.userId}> nominated this title, but did not provide a reason.`;
+}
+
+function buildHeaderContent(
+  kindLabel: string,
+  window: NominationWindow,
+): string {
+  return `## ${kindLabel} Nominations - Round ${window.targetRound}`;
 }
 
 function buildFooterContent(commandLabel: string, window: NominationWindow): string {
