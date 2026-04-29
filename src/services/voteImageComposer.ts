@@ -23,6 +23,7 @@ const OUTER_MARGIN_SIDE = 0;
 const TILE_GAP = 5;
 const EVEN_ROW_STAGGER_MAX = 36;
 const SIX_GRID_ROW_WIDTH_RATIO = 0.9;
+const TEN_GRID_ROW_WIDTH_RATIO = 0.9;
 
 type GridDimensions = {
   cols: number;
@@ -100,6 +101,41 @@ function getCustomSlots(count: number): { cols: number; rows: number; slots: Slo
         { col: 0.5, row: 1 },
         { col: 1.5, row: 1 },
         { col: 2.5, row: 1 },
+      ],
+    };
+  }
+  if (count === 9) {
+    return {
+      cols: 5,
+      rows: 2,
+      slots: [
+        { col: 0, row: 0 },
+        { col: 1, row: 0 },
+        { col: 2, row: 0 },
+        { col: 3, row: 0 },
+        { col: 4, row: 0 },
+        { col: 0.5, row: 1 },
+        { col: 1.5, row: 1 },
+        { col: 2.5, row: 1 },
+        { col: 3.5, row: 1 },
+      ],
+    };
+  }
+  if (count === 10) {
+    return {
+      cols: 5,
+      rows: 2,
+      slots: [
+        { col: 0, row: 0 },
+        { col: 1, row: 0 },
+        { col: 2, row: 0 },
+        { col: 3, row: 0 },
+        { col: 4, row: 0 },
+        { col: 0, row: 1 },
+        { col: 1, row: 1 },
+        { col: 2, row: 1 },
+        { col: 3, row: 1 },
+        { col: 4, row: 1 },
       ],
     };
   }
@@ -214,17 +250,25 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
   const composites: sharp.OverlayOptions[] = [];
   const isSixGrid = orderedCovers.length === 6;
+  const isTenGrid = orderedCovers.length === 10;
+  const isRowAlignedGrid = isSixGrid || isTenGrid;
   const tileGap = orderedCovers.length === 6 ? TILE_GAP * 3 : TILE_GAP;
   const rowGap = isSixGrid ? 0 : tileGap;
   const sixGridTargetRowWidth = isSixGrid
     ? Math.floor(usableWidth * SIX_GRID_ROW_WIDTH_RATIO)
     : 0;
+  const tenGridTargetRowWidth = isTenGrid
+    ? Math.floor(usableWidth * TEN_GRID_ROW_WIDTH_RATIO)
+    : 0;
   const tileWidth = isSixGrid
     ? Math.floor((sixGridTargetRowWidth - tileGap * 2) / 3)
+    : isTenGrid
+      ? Math.floor((tenGridTargetRowWidth - tileGap * 4) / 5)
     : custom?.cols === 2
       ? Math.floor((usableWidth - tileGap) / 2)
       : Math.floor((usableWidthForTiles - tileGap * (cols - 1)) / cols);
   const sixGridActualRowWidth = isSixGrid ? tileWidth * 3 + tileGap * 2 : 0;
+  const tenGridActualRowWidth = isTenGrid ? tileWidth * 5 + tileGap * 4 : 0;
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
   const tileHeight = Math.floor((usableHeight - rowGap * (rows - 1)) / rows);
 
@@ -234,11 +278,12 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     const rowShiftX = shouldStaggerRows
       ? ((slot.row % 2 === 0 ? -1 : 1) * rowStaggerAmount)
       : 0;
-    const sixGridRowStart = slot.row === 0
+    const alignedGridRowWidth = isSixGrid ? sixGridActualRowWidth : tenGridActualRowWidth;
+    const alignedRowStart = slot.row === 0
       ? OUTER_MARGIN_SIDE
-      : OUTER_MARGIN_SIDE + (usableWidth - sixGridActualRowWidth);
-    const rawLeft = isSixGrid
-      ? sixGridRowStart + slot.col * (tileWidth + tileGap)
+      : OUTER_MARGIN_SIDE + (usableWidth - alignedGridRowWidth);
+    const rawLeft = isRowAlignedGrid
+      ? alignedRowStart + slot.col * (tileWidth + tileGap)
       : custom?.cols === 2 && slot.col === 1
         ? CANVAS_WIDTH - OUTER_MARGIN_SIDE - tileWidth
         : OUTER_MARGIN_SIDE + slot.col * (tileWidth + tileGap) + rowShiftX;
