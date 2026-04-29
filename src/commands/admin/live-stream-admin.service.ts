@@ -265,7 +265,7 @@ export async function handleLiveStreamCreateModal(interaction: ModalSubmitIntera
   try {
     const thread = await forum.threads.create({
       message: {
-        content: `Live stream discussion for **${topic}**`,
+        content: `Live event discussion for **${topic}**`,
         embeds: imageUrl ? [new EmbedBuilder().setImage(imageUrl)] : [],
       },
       name: topic.slice(0, 100),
@@ -299,7 +299,7 @@ export async function handleLiveStreamCreateModal(interaction: ModalSubmitIntera
     const eventUrl = `https://discord.com/events/${interaction.guildId}/${event.id}`;
     await safeReply(interaction, {
       content:
-        `Created live stream resources.\n` +
+        `Created live event resources.\n` +
         `Thread: <#${threadId}>\n` +
         `Event: ${eventUrl}\n` +
         `Scheduled: ${timeZone}`,
