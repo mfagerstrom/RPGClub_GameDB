@@ -22,6 +22,7 @@ const OUTER_MARGIN_BOTTOM = 0;
 const OUTER_MARGIN_SIDE = 0;
 const TILE_GAP = 5;
 const EVEN_ROW_STAGGER_MAX = 36;
+const SIX_GRID_ROW_WIDTH_RATIO = 0.9;
 
 type GridDimensions = {
   cols: number;
@@ -75,15 +76,15 @@ function getCustomSlots(count: number): { cols: number; rows: number; slots: Slo
   }
   if (count === 6) {
     return {
-      cols: 4,
+      cols: 3,
       rows: 2,
       slots: [
         { col: 0, row: 0 },
         { col: 1, row: 0 },
         { col: 2, row: 0 },
+        { col: 0, row: 1 },
         { col: 1, row: 1 },
         { col: 2, row: 1 },
-        { col: 3, row: 1 },
       ],
     };
   }
@@ -212,11 +213,18 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     : usableWidth;
 
   const composites: sharp.OverlayOptions[] = [];
+  const isSixGrid = orderedCovers.length === 6;
   const tileGap = orderedCovers.length === 6 ? TILE_GAP * 3 : TILE_GAP;
-  const rowGap = orderedCovers.length === 6 ? 0 : tileGap;
-  const tileWidth = custom?.cols === 2
-    ? Math.floor((usableWidth - tileGap) / 2)
-    : Math.floor((usableWidthForTiles - tileGap * (cols - 1)) / cols);
+  const rowGap = isSixGrid ? 0 : tileGap;
+  const sixGridTargetRowWidth = isSixGrid
+    ? Math.floor(usableWidth * SIX_GRID_ROW_WIDTH_RATIO)
+    : 0;
+  const tileWidth = isSixGrid
+    ? Math.floor((sixGridTargetRowWidth - tileGap * 2) / 3)
+    : custom?.cols === 2
+      ? Math.floor((usableWidth - tileGap) / 2)
+      : Math.floor((usableWidthForTiles - tileGap * (cols - 1)) / cols);
+  const sixGridActualRowWidth = isSixGrid ? tileWidth * 3 + tileGap * 2 : 0;
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
   const tileHeight = Math.floor((usableHeight - rowGap * (rows - 1)) / rows);
 
@@ -226,9 +234,14 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     const rowShiftX = shouldStaggerRows
       ? ((slot.row % 2 === 0 ? -1 : 1) * rowStaggerAmount)
       : 0;
-    const rawLeft = custom?.cols === 2 && slot.col === 1
-      ? CANVAS_WIDTH - OUTER_MARGIN_SIDE - tileWidth
-      : OUTER_MARGIN_SIDE + slot.col * (tileWidth + tileGap) + rowShiftX;
+    const sixGridRowStart = slot.row === 0
+      ? OUTER_MARGIN_SIDE
+      : OUTER_MARGIN_SIDE + (usableWidth - sixGridActualRowWidth);
+    const rawLeft = isSixGrid
+      ? sixGridRowStart + slot.col * (tileWidth + tileGap)
+      : custom?.cols === 2 && slot.col === 1
+        ? CANVAS_WIDTH - OUTER_MARGIN_SIDE - tileWidth
+        : OUTER_MARGIN_SIDE + slot.col * (tileWidth + tileGap) + rowShiftX;
     const rawTop = OUTER_MARGIN_TOP + slot.row * (tileHeight + rowGap);
     const left = Math.round(rawLeft);
     const top = Math.round(rawTop);
