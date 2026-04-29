@@ -99,6 +99,7 @@ const NOW_PLAYING_COMPLETE_NOTE_SELECT_PREFIX = "np-complete-note";
 const NOW_PLAYING_COMPLETE_DETAILS_PREFIX = "np-complete-details";
 const NOW_PLAYING_COMPLETE_PLATFORM_SELECT_PREFIX = "np-complete-platform";
 const NOW_PLAYING_GALLERY_MAX = 5;
+const NOW_PLAYING_COMPOSITE_MAX = 10;
 const NOW_PLAYING_ALL_SELECT_ID = "nowplaying-all-select:v1";
 type NowPlayingAddSession = {
   userId: string;
@@ -2942,6 +2943,9 @@ export class NowPlayingCommand {
     for (const entry of entries) {
       if (!entry.gameId || seen.has(entry.gameId)) continue;
       seen.add(entry.gameId);
+      if (imageCount >= maxImages) {
+        break;
+      }
       const game = await Game.getGameById(entry.gameId);
       if (game?.imageData) {
         covers.push({
@@ -2949,9 +2953,6 @@ export class NowPlayingCommand {
           title: entry.title,
           imageData: game.imageData,
         });
-        if (imageCount >= maxImages) {
-          break;
-        }
         const filename = `now_playing_${entry.gameId}.png`;
         files.push(
           new AttachmentBuilder(game.imageData, { name: filename }),
@@ -2973,7 +2974,7 @@ export class NowPlayingCommand {
   ): Promise<{ components: NowPlayingListComponents; files: AttachmentBuilder[] }> {
     const { files, covers } = await this.buildNowPlayingAttachments(
       entries,
-      NOW_PLAYING_GALLERY_MAX,
+      NOW_PLAYING_COMPOSITE_MAX,
     );
     const components = this.buildNowPlayingEntryComponents(
       title,

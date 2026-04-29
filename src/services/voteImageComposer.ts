@@ -155,18 +155,12 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
       const renderedHeight = Math.max(1, Math.floor(sourceHeight * containScale));
       const slackX = Math.max(0, targetTileWidth - renderedWidth);
       const slackY = Math.max(0, targetTileHeight - renderedHeight);
-      const hasLargeSlack = slackX >= Math.floor(targetTileWidth * 0.16) ||
-        slackY >= Math.floor(targetTileHeight * 0.16);
-      const checkerShiftX = hasLargeSlack && ((rowIndex + itemIndex) % 2 === 0)
-        ? Math.floor(Math.min(slackX, tileWidth * 0.08))
-        : hasLargeSlack
-          ? -Math.floor(Math.min(slackX, tileWidth * 0.08))
-          : 0;
-      const checkerShiftY = hasLargeSlack && ((rowIndex + itemIndex) % 2 === 0)
-        ? Math.floor(Math.min(slackY, tileHeight * 0.08))
-        : hasLargeSlack
-          ? -Math.floor(Math.min(slackY, tileHeight * 0.08))
-          : 0;
+      const hasLargeSlack = slackX > TILE_GAP || slackY > TILE_GAP;
+      const checkerDirection = ((rowIndex + itemIndex) % 2 === 0) ? 1 : -1;
+      const maxShiftX = Math.max(0, Math.floor((slackX - TILE_GAP) / 2));
+      const maxShiftY = Math.max(0, Math.floor((slackY - TILE_GAP) / 2));
+      const checkerShiftX = hasLargeSlack ? checkerDirection * maxShiftX : 0;
+      const checkerShiftY = hasLargeSlack ? checkerDirection * maxShiftY : 0;
       const left = baseLeft +
         Math.floor((tileWidth - targetTileWidth) / 2) +
         checkerShiftX;
