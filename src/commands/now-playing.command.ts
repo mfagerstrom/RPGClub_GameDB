@@ -2830,7 +2830,7 @@ export class NowPlayingCommand {
         "Now Playing - Everyone",
         `No Now Playing entries found for <@${selectedUserId}>.`,
       );
-      await safeUpdate(interaction, {
+      await safeReply(interaction, {
         components: [container, ...(selectRow ? [selectRow] : [])],
         flags: buildComponentsV2Flags(isEphemeral),
       });
@@ -2847,7 +2847,7 @@ export class NowPlayingCommand {
       false,
       isEphemeral,
     );
-    await safeUpdate(interaction, {
+    await safeReply(interaction, {
       components: [...payload.components, ...(selectRow ? [selectRow] : [])],
       files: payload.files,
       flags: buildComponentsV2Flags(isEphemeral),
