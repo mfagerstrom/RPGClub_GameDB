@@ -418,11 +418,16 @@ export async function safeUpdate(interaction: AnyRepliable, options: any): Promi
       anyInteraction.__rpgDeferred = false;
       return;
     } catch (err: any) {
-      if (!isAckError(err)) {
-        // Fall back to follow-up path below
-      } else {
-        return;
+      if (isAckError(err)) {
+        const alreadyAcked = Boolean(
+          anyInteraction.__rpgAcked ?? anyInteraction.__rpgDeferred ?? anyInteraction.deferred ??
+            anyInteraction.replied,
+        );
+        if (!alreadyAcked) {
+          return;
+        }
       }
+      // Fall back to safeReply path below.
     }
   }
 

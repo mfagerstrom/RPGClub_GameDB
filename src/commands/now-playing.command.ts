@@ -1698,9 +1698,9 @@ export class NowPlayingCommand {
       flags: buildComponentsV2Flags(true),
     };
     if (mode === "update") {
-      await interaction.update(payload);
+      await safeUpdate(interaction, payload);
     } else {
-      await interaction.reply(payload);
+      await safeReply(interaction, payload);
     }
   }
 
@@ -3592,14 +3592,14 @@ export class NowPlayingCommand {
             session.userId,
             imported.gameId,
             session.note,
-            "update",
+            "reply",
           );
         } catch (err: any) {
           const msg = err?.message ?? "Failed to import from IGDB.";
           const container = new ContainerBuilder().addTextDisplayComponents(
             new TextDisplayBuilder().setContent(msg),
           );
-          await sel.reply({
+          await safeReply(sel, {
             components: [container],
             flags: buildComponentsV2Flags(true),
           }).catch(() => {});

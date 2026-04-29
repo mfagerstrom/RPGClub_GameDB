@@ -21,7 +21,7 @@ import Member from "../classes/Member.js";
 import { COMPLETION_TYPES, type CompletionType } from "../commands/profile.command.js";
 import { createIgdbSession, type IgdbSelectOption } from "../services/IGDB/IgdbSelectService.js";
 import { igdbService, type IGDBGameDetails } from "../services/IGDB/IgdbService.js";
-import { stripModalInput } from "../functions/InteractionUtils.js";
+import { safeUpdate, stripModalInput } from "../functions/InteractionUtils.js";
 import { notifyUnknownCompletionPlatform } from "../functions/CompletionHelpers.js";
 import { COMPLETION_REACTION_DEV_CHANNEL_ID } from "../config/channels.js";
 
@@ -532,13 +532,11 @@ export class MessageReactionAdd {
     session: CompletionReactionSession,
     gameId: number,
   ): Promise<void> {
-    const updateMessage = async (content: string): Promise<void> => {
-      const payload = { content, components: [] as never[] };
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(payload).catch(() => {});
-        return;
-      }
-      await interaction.update(payload).catch(() => {});
+    const updateMessage = async (
+      content: string,
+      components: ActionRowBuilder<StringSelectMenuBuilder>[] = [],
+    ): Promise<void> => {
+      await safeUpdate(interaction, { content, components }).catch(() => {});
     };
 
     const game = await Game.getGameById(gameId);
@@ -569,10 +567,10 @@ export class MessageReactionAdd {
     const platformContent = platforms.length > 24
       ? `Select the platform for "${game.title}" (showing first 24).`
       : `Select the platform for "${game.title}".`;
-    await interaction.update({
-      content: platformContent,
-      components: [buildCompletionPlatformRow(session.sessionId, platformOptions)],
-    }).catch(() => {});
+    await updateMessage(
+      platformContent,
+      [buildCompletionPlatformRow(session.sessionId, platformOptions)],
+    );
   }
 
   private async promptIgdbImport(

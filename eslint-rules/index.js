@@ -1069,6 +1069,122 @@ export default {
         };
       },
     },
+    "no-igdb-session-callback-unsafe-response": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Disallow reply/update calls on createIgdbSession callback interactions.",
+        },
+        schema: [],
+        messages: {
+          unsafeIgdbSessionResponse:
+            "Do not call {{method}} inside createIgdbSession callbacks. Use safeReply/safeUpdate or editReply/followUp based on interaction state.",
+        },
+      },
+      create(context) {
+        const walk = (node, visit) => {
+          if (!node || typeof node.type !== "string") return;
+          visit(node);
+          for (const key of Object.keys(node)) {
+            const value = node[key];
+            if (!value) continue;
+            if (Array.isArray(value)) {
+              for (const item of value) {
+                if (item && typeof item.type === "string") {
+                  walk(item, visit);
+                }
+              }
+              continue;
+            }
+            if (value && typeof value.type === "string") {
+              walk(value, visit);
+            }
+          }
+        };
+
+        return {
+          CallExpression(node) {
+            if (node.callee.type !== "Identifier" || node.callee.name !== "createIgdbSession") {
+              return;
+            }
+            const callback = node.arguments[2];
+            if (
+              !callback ||
+              (callback.type !== "ArrowFunctionExpression" &&
+                callback.type !== "FunctionExpression")
+            ) {
+              return;
+            }
+            const interactionParam = callback.params?.[0];
+            if (!interactionParam || interactionParam.type !== "Identifier") return;
+            const interactionName = interactionParam.name;
+
+            walk(callback.body, (child) => {
+              if (child.type !== "CallExpression") return;
+              if (child.callee.type !== "MemberExpression") return;
+              if (child.callee.object.type !== "Identifier") return;
+              if (child.callee.object.name !== interactionName) return;
+              if (child.callee.property.type !== "Identifier") return;
+              const methodName = child.callee.property.name;
+              if (methodName !== "reply" && methodName !== "update") return;
+              context.report({
+                node: child.callee.property,
+                messageId: "unsafeIgdbSessionResponse",
+                data: { method: `${interactionName}.${methodName}()` },
+              });
+            });
+          },
+        };
+      },
+    },
+    "no-empty-catch-on-interaction-response": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Disallow empty catch handlers chained from interaction response methods.",
+        },
+        schema: [],
+        messages: {
+          emptyInteractionCatch:
+            "Do not use an empty catch on interaction response calls. Handle fallback behavior or use safe helpers.",
+        },
+      },
+      create(context) {
+        const isEmptyCatchHandler = (node) => {
+          if (!node) return true;
+          if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
+            if (node.body.type !== "BlockStatement") return false;
+            return node.body.body.length === 0;
+          }
+          return false;
+        };
+
+        const isInteractionResponseCall = (node) => {
+          if (!node || node.type !== "CallExpression") return false;
+          if (node.callee.type !== "MemberExpression") return false;
+          if (node.callee.property.type !== "Identifier") return false;
+          return DIRECT_INTERACTION_METHODS.has(node.callee.property.name);
+        };
+
+        return {
+          CallExpression(node) {
+            if (
+              node.callee.type !== "MemberExpression" ||
+              node.callee.property.type !== "Identifier" ||
+              node.callee.property.name !== "catch"
+            ) {
+              return;
+            }
+            if (!isInteractionResponseCall(node.callee.object)) return;
+            const [handler] = node.arguments;
+            if (!isEmptyCatchHandler(handler)) return;
+            context.report({ node, messageId: "emptyInteractionCatch" });
+          },
+        };
+      },
+    },
     "no-edit-reply-on-modal-union": {
       meta: {
         type: "problem",

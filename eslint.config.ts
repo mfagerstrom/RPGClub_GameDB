@@ -80,6 +80,8 @@ export default [
       "local/prefer-safe-interaction-methods": "warn",
       "local/no-deprecated-interaction-options": "error",
       "local/no-silent-interaction-update-catch": "error",
+      "local/no-igdb-session-callback-unsafe-response": "error",
+      "local/no-empty-catch-on-interaction-response": "warn",
       "local/no-edit-reply-on-modal-union": "error",
       "local/require-relative-import-js-extension": "error",
       "local/slash-options-required-first": "error",
