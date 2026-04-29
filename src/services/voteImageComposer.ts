@@ -13,6 +13,7 @@ export interface IComposeVoteImageParams {
   voteType: VoteImageType;
   covers: IVoteImageCover[];
   sortByTitle?: boolean;
+  prioritySizing?: boolean;
 }
 
 const CANVAS_WIDTH = 1920;
@@ -26,20 +27,6 @@ type GridDimensions = {
   cols: number;
   rows: number;
 };
-
-function shouldUseCoverFitForFourGrid(
-  sourceWidth: number,
-  sourceHeight: number,
-  tileWidth: number,
-  tileHeight: number,
-): boolean {
-  if (sourceWidth <= 0 || sourceHeight <= 0 || tileWidth <= 0 || tileHeight <= 0) {
-    return false;
-  }
-  const sourceAspect = sourceWidth / sourceHeight;
-  const tileAspect = tileWidth / tileHeight;
-  return sourceAspect < (tileAspect * 0.72);
-}
 
 async function cropTransparentRowsKeepingWidth(imageBuffer: Buffer): Promise<Buffer> {
   const { data, info } = await sharp(imageBuffer)
@@ -136,9 +123,8 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const orderedCovers = params.sortByTitle === false
     ? [...params.covers]
     : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
+  const usePrioritySizing = params.prioritySizing === true;
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
-  const isFourGrid = orderedCovers.length === 4 && cols === 2 && rows === 2;
-
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
 
   const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
@@ -160,27 +146,47 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
-      const left = rowXOffset + itemIndex * (tileWidth + TILE_GAP);
+      const baseLeft = rowXOffset + itemIndex * (tileWidth + TILE_GAP);
+      const absoluteIndex = rowStart + itemIndex;
+      const scale = usePrioritySizing ? Math.max(0.72, 1 - absoluteIndex * 0.06) : 1;
+      const targetTileWidth = Math.max(1, Math.floor(tileWidth * scale));
+      const targetTileHeight = Math.max(1, Math.floor(tileHeight * scale));
       const metadata = await sharp(cover.imageData).metadata();
-      const fitMode = isFourGrid &&
-        shouldUseCoverFitForFourGrid(
-          metadata.width ?? 0,
-          metadata.height ?? 0,
-          tileWidth,
-          tileHeight,
-        )
-        ? "cover"
-        : "contain";
+      const sourceWidth = metadata.width ?? targetTileWidth;
+      const sourceHeight = metadata.height ?? targetTileHeight;
+      const containScale = Math.min(targetTileWidth / sourceWidth, targetTileHeight / sourceHeight);
+      const renderedWidth = Math.max(1, Math.floor(sourceWidth * containScale));
+      const renderedHeight = Math.max(1, Math.floor(sourceHeight * containScale));
+      const slackX = Math.max(0, targetTileWidth - renderedWidth);
+      const slackY = Math.max(0, targetTileHeight - renderedHeight);
+      const hasLargeSlack = slackX >= Math.floor(targetTileWidth * 0.16) ||
+        slackY >= Math.floor(targetTileHeight * 0.16);
+      const checkerShiftX = hasLargeSlack && ((rowIndex + itemIndex) % 2 === 0)
+        ? Math.floor(Math.min(slackX, tileWidth * 0.08))
+        : hasLargeSlack
+          ? -Math.floor(Math.min(slackX, tileWidth * 0.08))
+          : 0;
+      const checkerShiftY = hasLargeSlack && ((rowIndex + itemIndex) % 2 === 0)
+        ? Math.floor(Math.min(slackY, tileHeight * 0.08))
+        : hasLargeSlack
+          ? -Math.floor(Math.min(slackY, tileHeight * 0.08))
+          : 0;
+      const left = baseLeft +
+        Math.floor((tileWidth - targetTileWidth) / 2) +
+        checkerShiftX;
+      const adjustedTop = top +
+        Math.floor((tileHeight - targetTileHeight) / 2) +
+        checkerShiftY;
 
       const resized = await sharp(cover.imageData)
-        .resize(tileWidth, tileHeight, {
-          fit: fitMode,
+        .resize(targetTileWidth, targetTileHeight, {
+          fit: "contain",
           background: { r: 0, g: 0, b: 0, alpha: 0 },
         })
         .png({ compressionLevel: 9, palette: true, quality: 90 })
         .toBuffer();
 
-      composites.push({ input: resized, left, top });
+      composites.push({ input: resized, left, top: adjustedTop });
     }
   }
 
