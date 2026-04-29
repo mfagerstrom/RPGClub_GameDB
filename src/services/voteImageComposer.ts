@@ -22,7 +22,8 @@ const HEADER_FONT_SIZE_MIN = 96;
 const HEADER_FONT_SIZE_MAX = 220;
 const HEADER_TARGET_WIDTH_RATIO = 0.8;
 const HEADER_SIDE_SAFE_PADDING = 100;
-const HEADER_BOTTOM_SAFE_PADDING = 24;
+const HEADER_BAR_HEIGHT = 130;
+const HEADER_BAR_GAP = 10;
 
 type GridDimensions = {
   cols: number;
@@ -58,27 +59,14 @@ function estimateHeaderFontSize(label: string): number {
   return Math.max(HEADER_FONT_SIZE_MIN, Math.min(HEADER_FONT_SIZE_MAX, estimated));
 }
 
-function buildHeaderOverlaySvg(
-  voteType: VoteImageType,
-  roundNumber: number,
-  singleRowLayout: boolean,
-): Buffer {
-  const plainLabel = `[${voteType}] Round ${roundNumber}`;
-  const label = escapeXml(`[${voteType}] Round ${roundNumber}`);
-  const subtitle = "Nominations";
-  const dynamicFontSize = estimateHeaderFontSize(plainLabel);
-  const subtitleFontSize = Math.max(24, Math.floor(dynamicFontSize * 0.6));
-  const lineGap = Math.floor(dynamicFontSize * 0.475);
-  const mainYDefault = singleRowLayout
-    ? Math.floor(CANVAS_HEIGHT * 0.84)
-    : Math.floor(CANVAS_HEIGHT * 0.48);
-  const maxSubtitleY =
-    CANVAS_HEIGHT - Math.floor(subtitleFontSize / 2) - HEADER_BOTTOM_SAFE_PADDING;
-  const maxMainY = maxSubtitleY - lineGap;
-  const minMainY = Math.floor(dynamicFontSize / 2) + HEADER_BOTTOM_SAFE_PADDING;
-  const mainY = Math.max(minMainY, Math.min(mainYDefault, maxMainY));
-  const subtitleY = Math.min(maxSubtitleY, mainY + lineGap);
-  const svg = `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Buffer {
+  const plainLabel = `${voteType} Nominations - Round ${roundNumber}`;
+  const label = escapeXml(`${voteType} Nominations - Round ${roundNumber}`);
+  const dynamicFontSize = Math.min(
+    estimateHeaderFontSize(plainLabel),
+    Math.floor(HEADER_BAR_HEIGHT * 0.58),
+  );
+  const svg = `<svg width="${CANVAS_WIDTH}" height="${HEADER_BAR_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="headerGlow" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="6" result="blur"/>
@@ -95,7 +83,7 @@ function buildHeaderOverlaySvg(
   </defs>
   <text
     x="50%"
-    y="${mainY}"
+    y="50%"
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Arial, Helvetica, sans-serif"
@@ -105,18 +93,6 @@ function buildHeaderOverlaySvg(
     stroke="#000000"
     stroke-width="3"
     filter="url(#headerGlow)">${label}</text>
-  <text
-    x="50%"
-    y="${subtitleY}"
-    text-anchor="middle"
-    dominant-baseline="middle"
-    font-family="Arial, Helvetica, sans-serif"
-    font-size="${subtitleFontSize}"
-    font-weight="900"
-    fill="#FFFFFF"
-    stroke="#000000"
-    stroke-width="2"
-    filter="url(#headerGlow)">${subtitle}</text>
 </svg>`;
 
   return Buffer.from(svg);
@@ -135,9 +111,15 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN * 2;
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN * 2;
+  const hasSingleRowLayout = rows === 1;
+  const topRowCount = hasSingleRowLayout ? 1 : Math.ceil(rows / 2);
+  const contentHeightExcludingBar = usableHeight - HEADER_BAR_HEIGHT - HEADER_BAR_GAP * 2;
 
   const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
-  const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
+  const tileHeight = Math.floor((contentHeightExcludingBar - TILE_GAP * (rows - 1)) / rows);
+  const headerBarTop = hasSingleRowLayout
+    ? CANVAS_HEIGHT - OUTER_MARGIN - HEADER_BAR_HEIGHT
+    : OUTER_MARGIN + topRowCount * (tileHeight + TILE_GAP) + HEADER_BAR_GAP;
 
   const composites: sharp.OverlayOptions[] = [];
 
@@ -150,7 +132,10 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
     const rowWidth = rowItems.length * tileWidth + (rowItems.length - 1) * TILE_GAP;
     const rowXOffset = OUTER_MARGIN + Math.floor((usableWidth - rowWidth) / 2);
-    const top = OUTER_MARGIN + rowIndex * (tileHeight + TILE_GAP);
+    const offsetAfterBar = !hasSingleRowLayout && rowIndex >= topRowCount
+      ? HEADER_BAR_HEIGHT + HEADER_BAR_GAP * 2
+      : 0;
+    const top = OUTER_MARGIN + rowIndex * (tileHeight + TILE_GAP) + offsetAfterBar;
 
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
@@ -169,9 +154,22 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   }
 
   composites.push({
-    input: buildHeaderOverlaySvg(params.voteType, params.roundNumber, rows === 1),
+    input: {
+      create: {
+        width: CANVAS_WIDTH,
+        height: HEADER_BAR_HEIGHT,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 1 },
+      },
+    },
     left: 0,
-    top: 0,
+    top: headerBarTop,
+  });
+
+  composites.push({
+    input: buildHeaderOverlaySvg(params.voteType, params.roundNumber),
+    left: 0,
+    top: headerBarTop,
   });
 
   return sharp({
