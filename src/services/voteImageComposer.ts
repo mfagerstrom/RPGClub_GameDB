@@ -13,7 +13,6 @@ export interface IComposeVoteImageParams {
   voteType: VoteImageType;
   covers: IVoteImageCover[];
   sortByTitle?: boolean;
-  prioritySizing?: boolean;
 }
 
 const CANVAS_WIDTH = 1920;
@@ -123,7 +122,6 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const orderedCovers = params.sortByTitle === false
     ? [...params.covers]
     : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
-  const usePrioritySizing = params.prioritySizing === true;
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
 
@@ -147,10 +145,8 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
       const baseLeft = rowXOffset + itemIndex * (tileWidth + TILE_GAP);
-      const absoluteIndex = rowStart + itemIndex;
-      const scale = usePrioritySizing ? Math.max(0.72, 1 - absoluteIndex * 0.06) : 1;
-      const targetTileWidth = Math.max(1, Math.floor(tileWidth * scale));
-      const targetTileHeight = Math.max(1, Math.floor(tileHeight * scale));
+      const targetTileWidth = tileWidth;
+      const targetTileHeight = tileHeight;
       const metadata = await sharp(cover.imageData).metadata();
       const sourceWidth = metadata.width ?? targetTileWidth;
       const sourceHeight = metadata.height ?? targetTileHeight;

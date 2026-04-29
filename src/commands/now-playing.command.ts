@@ -2975,7 +2975,6 @@ export class NowPlayingCommand {
       entries,
       NOW_PLAYING_GALLERY_MAX,
     );
-    const hasCustomSortOrder = entries.some((entry) => entry.sortOrder != null);
     const components = this.buildNowPlayingEntryComponents(
       title,
       entries,
@@ -2983,7 +2982,7 @@ export class NowPlayingCommand {
       target.id,
       isOwnList,
       isEphemeral,
-      await this.buildNowPlayingCompositeImageUrl(files, covers, hasCustomSortOrder),
+      await this.buildNowPlayingCompositeImageUrl(files, covers),
     );
     return { components, files };
   }
@@ -2991,7 +2990,6 @@ export class NowPlayingCommand {
   private async buildNowPlayingCompositeImageUrl(
     files: AttachmentBuilder[],
     covers: Array<{ gameId: number; title: string; imageData: Buffer }>,
-    usePrioritySizing: boolean,
   ): Promise<string | null> {
     if (!covers.length) {
       return null;
@@ -3001,7 +2999,6 @@ export class NowPlayingCommand {
       voteType: "GOTM",
       covers,
       sortByTitle: false,
-      prioritySizing: usePrioritySizing,
     });
     const filename = "now_playing_composite.png";
     files.push(new AttachmentBuilder(imageBuffer, { name: filename }));
