@@ -75,15 +75,15 @@ function getCustomSlots(count: number): { cols: number; rows: number; slots: Slo
   }
   if (count === 6) {
     return {
-      cols: 6,
+      cols: 4,
       rows: 2,
       slots: [
         { col: 0, row: 0 },
+        { col: 1, row: 0 },
         { col: 2, row: 0 },
-        { col: 4, row: 0 },
         { col: 1, row: 1 },
+        { col: 2, row: 1 },
         { col: 3, row: 1 },
-        { col: 5, row: 1 },
       ],
     };
   }
