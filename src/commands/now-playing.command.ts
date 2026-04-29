@@ -2995,6 +2995,7 @@ export class NowPlayingCommand {
       roundNumber: 1,
       voteType: "GOTM",
       covers,
+      sortByTitle: false,
     });
     const filename = "now_playing_composite.png";
     files.push(new AttachmentBuilder(imageBuffer, { name: filename }));

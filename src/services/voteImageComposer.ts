@@ -12,6 +12,7 @@ export interface IComposeVoteImageParams {
   roundNumber: number;
   voteType: VoteImageType;
   covers: IVoteImageCover[];
+  sortByTitle?: boolean;
 }
 
 const CANVAS_WIDTH = 1920;
@@ -96,7 +97,9 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     throw new Error("No covers were supplied for image generation.");
   }
 
-  const orderedCovers = [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
+  const orderedCovers = params.sortByTitle === false
+    ? [...params.covers]
+    : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
 
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
