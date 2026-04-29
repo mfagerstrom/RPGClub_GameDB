@@ -28,7 +28,11 @@ export type NominationWindow = {
 };
 
 export type NominationListPayload = {
-  components: Array<ContainerBuilder | ActionRowBuilder<StringSelectMenuBuilder>>;
+  components: Array<
+    | ContainerBuilder
+    | MediaGalleryBuilder
+    | ActionRowBuilder<StringSelectMenuBuilder>
+  >;
   files: AttachmentBuilder[];
 };
 
@@ -69,11 +73,10 @@ function buildNominationContainers(
   voteImageUrl: string | null,
   altLayout: boolean,
   includeDetailSelect: boolean,
-): Array<ContainerBuilder | ActionRowBuilder<StringSelectMenuBuilder>> {
+): Array<ContainerBuilder | MediaGalleryBuilder | ActionRowBuilder<StringSelectMenuBuilder>> {
   const containers: ContainerBuilder[] = [];
   let container = new ContainerBuilder();
   void altLayout;
-  addVoteImageToContainer(container, voteImageUrl);
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(buildHeaderContent(kindLabel, window)),
   );
@@ -128,6 +131,10 @@ function buildNominationContainers(
     );
   }
   const selectRows = includeDetailSelect ? buildNominationSelectRows(nominations, kindLabel) : [];
+  const voteImageComponent = buildVoteImageComponent(voteImageUrl);
+  if (voteImageComponent) {
+    return [voteImageComponent, ...containers, ...selectRows];
+  }
   return [...containers, ...selectRows];
 }
 
@@ -283,14 +290,13 @@ function toVoteImageType(kindLabel: string): VoteImageType | null {
   return null;
 }
 
-function addVoteImageToContainer(container: ContainerBuilder, voteImageUrl: string | null): void {
+function buildVoteImageComponent(voteImageUrl: string | null): MediaGalleryBuilder | null {
   if (!voteImageUrl) {
-    return;
+    return null;
   }
-  const gallery = new MediaGalleryBuilder().addItems(
+  return new MediaGalleryBuilder().addItems(
     new MediaGalleryItemBuilder()
       .setURL(voteImageUrl)
       .setDescription("Vote image"),
   );
-  container.addMediaGalleryComponents(gallery);
 }
