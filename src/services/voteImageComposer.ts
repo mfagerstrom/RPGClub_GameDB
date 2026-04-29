@@ -28,6 +28,55 @@ type GridDimensions = {
   rows: number;
 };
 
+type Slot = {
+  col: number;
+  row: number;
+};
+
+function getCustomSlots(count: number): { cols: number; rows: number; slots: Slot[] } | null {
+  if (count === 2) {
+    return {
+      cols: 2,
+      rows: 1,
+      slots: [{ col: 0, row: 0 }, { col: 1, row: 0 }],
+    };
+  }
+  if (count === 3) {
+    return {
+      cols: 3,
+      rows: 1,
+      slots: [{ col: 0, row: 0 }, { col: 1, row: 0 }, { col: 2, row: 0 }],
+    };
+  }
+  if (count === 4) {
+    return {
+      cols: 4,
+      rows: 2,
+      slots: [
+        { col: 0, row: 0 },
+        { col: 2, row: 0 },
+        { col: 1, row: 1 },
+        { col: 3, row: 1 },
+      ],
+    };
+  }
+  if (count === 6) {
+    return {
+      cols: 6,
+      rows: 2,
+      slots: [
+        { col: 0, row: 0 },
+        { col: 2, row: 0 },
+        { col: 4, row: 0 },
+        { col: 1, row: 1 },
+        { col: 3, row: 1 },
+        { col: 5, row: 1 },
+      ],
+    };
+  }
+  return null;
+}
+
 async function cropTransparentRowsKeepingWidth(imageBuffer: Buffer): Promise<Buffer> {
   const { data, info } = await sharp(imageBuffer)
     .ensureAlpha()
@@ -123,9 +172,9 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const orderedCovers = params.sortByTitle === false
     ? [...params.covers]
     : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
-  const reverseThreeEntryVerticalPattern = orderedCovers.length === 3;
-  const { cols, rows } = resolveGridDimensions(orderedCovers.length);
-  const shouldStaggerRows = orderedCovers.length % 2 === 0 && rows > 1;
+  const custom = getCustomSlots(orderedCovers.length);
+  const { cols, rows } = custom ?? resolveGridDimensions(orderedCovers.length);
+  const shouldStaggerRows = !custom && orderedCovers.length % 2 === 0 && rows > 1;
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
   const rowStaggerAmount = shouldStaggerRows
     ? Math.min(EVEN_ROW_STAGGER_MAX, Math.max(10, Math.floor(usableWidth * 0.025)))
@@ -139,78 +188,33 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
 
   const composites: sharp.OverlayOptions[] = [];
+  const tileGap = TILE_GAP;
+  const tileWidth = custom?.cols === 2
+    ? Math.floor((usableWidth - tileGap) / 2)
+    : Math.floor((usableWidthForTiles - tileGap * (cols - 1)) / cols);
+  const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
+  const tileHeight = Math.floor((usableHeight - tileGap * (rows - 1)) / rows);
 
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-    const rowStart = rowIndex * cols;
-    const rowItems = orderedCovers.slice(rowStart, rowStart + cols);
-    if (!rowItems.length) {
-      continue;
-    }
-
-    const rowWidth = rowItems.length * tileWidth + (rowItems.length - 1) * TILE_GAP;
-    const rowXOffset = OUTER_MARGIN_SIDE + Math.floor((usableWidth - rowWidth) / 2);
-    const top = OUTER_MARGIN_TOP + rowIndex * (tileHeight + TILE_GAP);
-    const rowRenderData: Array<{
-      cover: IVoteImageCover;
-      itemIndex: number;
-      renderedWidth: number;
-      renderedHeight: number;
-      slackX: number;
-      slackY: number;
-    }> = [];
-
-    for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
-      const cover = rowItems[itemIndex];
-      const metadata = await sharp(cover.imageData).metadata();
-      const sourceWidth = metadata.width ?? tileWidth;
-      const sourceHeight = metadata.height ?? tileHeight;
-      const containScale = Math.min(tileWidth / sourceWidth, tileHeight / sourceHeight);
-      const renderedWidth = Math.max(1, Math.floor(sourceWidth * containScale));
-      const renderedHeight = Math.max(1, Math.floor(sourceHeight * containScale));
-      const slackX = Math.max(0, tileWidth - renderedWidth);
-      const slackY = Math.max(0, tileHeight - renderedHeight);
-      rowRenderData.push({
-        cover,
-        itemIndex,
-        renderedWidth,
-        renderedHeight,
-        slackX,
-        slackY,
-      });
-    }
-
+  for (let i = 0; i < orderedCovers.length; i += 1) {
+    const cover = orderedCovers[i];
+    const slot = custom?.slots[i] ?? { col: i % cols, row: Math.floor(i / cols) };
     const rowShiftX = shouldStaggerRows
-      ? ((rowIndex % 2 === 0 ? -1 : 1) * rowStaggerAmount)
+      ? ((slot.row % 2 === 0 ? -1 : 1) * rowStaggerAmount)
       : 0;
+    const left = custom?.cols === 2 && slot.col === 1
+      ? CANVAS_WIDTH - OUTER_MARGIN_SIDE - tileWidth
+      : OUTER_MARGIN_SIDE + slot.col * (tileWidth + tileGap) + rowShiftX;
+    const top = OUTER_MARGIN_TOP + slot.row * (tileHeight + tileGap);
 
-    for (const item of rowRenderData) {
-      const cover = item.cover;
-      const itemIndex = item.itemIndex;
-      const baseLeft = rowXOffset + itemIndex * (tileWidth + TILE_GAP);
-      const targetTileWidth = tileWidth;
-      const targetTileHeight = tileHeight;
-      const hasLargeSlack = item.slackX > TILE_GAP || item.slackY > TILE_GAP;
-      const checkerDirection = (((rowIndex + itemIndex) % 2 === 0) ? 1 : -1) *
-        (reverseThreeEntryVerticalPattern ? -1 : 1);
-      const maxShiftY = Math.max(0, Math.floor((item.slackY - TILE_GAP) / 2));
-      const checkerShiftY = hasLargeSlack ? checkerDirection * maxShiftY : 0;
-      const left = baseLeft +
-        Math.floor((tileWidth - targetTileWidth) / 2) +
-        rowShiftX;
-      const adjustedTop = top +
-        Math.floor((tileHeight - targetTileHeight) / 2) +
-        checkerShiftY;
+    const resized = await sharp(cover.imageData)
+      .resize(tileWidth, tileHeight, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png({ compressionLevel: 9, palette: true, quality: 90 })
+      .toBuffer();
 
-      const resized = await sharp(cover.imageData)
-        .resize(targetTileWidth, targetTileHeight, {
-          fit: "contain",
-          background: { r: 0, g: 0, b: 0, alpha: 0 },
-        })
-        .png({ compressionLevel: 9, palette: true, quality: 90 })
-        .toBuffer();
-
-      composites.push({ input: resized, left, top: adjustedTop });
-    }
+    composites.push({ input: resized, left, top });
   }
 
   const composed = await sharp({
