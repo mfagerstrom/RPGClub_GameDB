@@ -5,10 +5,10 @@ import {
   type CommandInteraction,
 } from "discord.js";
 import { Discord, Guild, Slash, SlashChoice, SlashOption } from "discordx";
-import BotVotingInfo from "../classes/BotVotingInfo.js";
 import Game from "../classes/Game.js";
 import { type NominationKind, listNominationsForRound } from "../classes/Nomination.js";
 import { safeDeferReply, safeReply } from "../functions/InteractionUtils.js";
+import { getUpcomingNominationWindow } from "../functions/NominationWindow.js";
 import { isAdmin } from "./admin/admin-auth.utils.js";
 import { composeVoteImage, type VoteImageType } from "../services/voteImageComposer.js";
 
@@ -99,16 +99,16 @@ export class GenerateVoteImageCommand {
       return;
     }
 
-    const currentRound = round ?? (await BotVotingInfo.getCurrentRound())?.roundNumber ?? null;
-    if (!Number.isInteger(currentRound) || Number(currentRound) <= 0) {
+    const defaultRound = round ?? (await getUpcomingNominationWindow()).targetRound;
+    if (!Number.isInteger(defaultRound) || Number(defaultRound) <= 0) {
       await safeReply(interaction, {
-        content: "No current round could be resolved from BOT_VOTING_INFO.",
+        content: "No upcoming nomination round could be resolved from BOT_VOTING_INFO.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const roundNumber = Number(currentRound);
+    const roundNumber = Number(defaultRound);
     if (!tryAcquireLock(interaction.guildId, roundNumber, voteKind.label)) {
       await safeReply(interaction, {
         content: `Generation already in progress for [${voteKind.label}] Round ${roundNumber}. Try again shortly.`,

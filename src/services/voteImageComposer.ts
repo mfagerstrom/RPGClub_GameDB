@@ -55,10 +55,15 @@ function estimateHeaderFontSize(label: string): number {
   return Math.max(HEADER_FONT_SIZE_MIN, Math.min(HEADER_FONT_SIZE_MAX, estimated));
 }
 
-function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Buffer {
+function buildHeaderOverlaySvg(
+  voteType: VoteImageType,
+  roundNumber: number,
+  singleRowLayout: boolean,
+): Buffer {
   const plainLabel = `[${voteType}] Round ${roundNumber}`;
   const label = escapeXml(`[${voteType}] Round ${roundNumber}`);
   const dynamicFontSize = estimateHeaderFontSize(plainLabel);
+  const yPosition = singleRowLayout ? "88%" : "50%";
   const svg = `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="headerGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -76,7 +81,7 @@ function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Bu
   </defs>
   <text
     x="50%"
-    y="50%"
+    y="${yPosition}"
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Arial, Helvetica, sans-serif"
@@ -138,7 +143,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   }
 
   composites.push({
-    input: buildHeaderOverlaySvg(params.voteType, params.roundNumber),
+    input: buildHeaderOverlaySvg(params.voteType, params.roundNumber, rows === 1),
     left: 0,
     top: 0,
   });
