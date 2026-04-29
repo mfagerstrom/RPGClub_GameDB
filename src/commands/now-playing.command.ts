@@ -43,7 +43,6 @@ import {
 import { SeparatorSpacingSize } from "discord-api-types/v10";
 import Member, { type IMemberNowPlayingEntry } from "../classes/Member.js";
 import {
-  safeDeferUpdate,
   safeDeferReply,
   safeReply,
   safeUpdate,

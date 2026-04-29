@@ -210,10 +210,12 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     const rowShiftX = shouldStaggerRows
       ? ((slot.row % 2 === 0 ? -1 : 1) * rowStaggerAmount)
       : 0;
-    const left = custom?.cols === 2 && slot.col === 1
+    const rawLeft = custom?.cols === 2 && slot.col === 1
       ? CANVAS_WIDTH - OUTER_MARGIN_SIDE - tileWidth
       : OUTER_MARGIN_SIDE + slot.col * (tileWidth + tileGap) + rowShiftX;
-    const top = OUTER_MARGIN_TOP + slot.row * (tileHeight + tileGap);
+    const rawTop = OUTER_MARGIN_TOP + slot.row * (tileHeight + tileGap);
+    const left = Math.round(rawLeft);
+    const top = Math.round(rawTop);
 
     const resized = await sharp(cover.imageData)
       .resize(tileWidth, tileHeight, {
