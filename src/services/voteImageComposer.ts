@@ -16,7 +16,7 @@ export interface IComposeVoteImageParams {
 }
 
 const CANVAS_WIDTH = 1920;
-const CANVAS_HEIGHT = 1080;
+const BASE_CANVAS_HEIGHT = 1080;
 const OUTER_MARGIN_TOP = 0;
 const OUTER_MARGIN_BOTTOM = 0;
 const OUTER_MARGIN_SIDE = 0;
@@ -27,63 +27,13 @@ type GridDimensions = {
   rows: number;
 };
 
-async function cropTransparentRowsKeepingWidth(imageBuffer: Buffer): Promise<Buffer> {
-  const { data, info } = await sharp(imageBuffer)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  const { width, height, channels } = info;
-  const alphaOffset = channels - 1;
-
-  let top = 0;
-  let bottom = height - 1;
-
-  const rowHasOpaquePixel = (row: number): boolean => {
-    const rowStart = row * width * channels;
-    const rowEnd = rowStart + width * channels;
-    for (let offset = rowStart + alphaOffset; offset < rowEnd; offset += channels) {
-      if ((data[offset] ?? 0) > 0) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  while (top < height && !rowHasOpaquePixel(top)) {
-    top += 1;
-  }
-  while (bottom >= top && !rowHasOpaquePixel(bottom)) {
-    bottom -= 1;
-  }
-
-  if (top === 0 && bottom === height - 1) {
-    return imageBuffer;
-  }
-
-  if (top > bottom) {
-    return imageBuffer;
-  }
-
-  const croppedHeight = bottom - top + 1;
-  return sharp(imageBuffer)
-    .extract({
-      left: 0,
-      top,
-      width,
-      height: croppedHeight,
-    })
-    .png({ compressionLevel: 9, palette: true, quality: 90 })
-    .toBuffer();
-}
-
 function resolveGridDimensions(count: number): GridDimensions {
   if (count <= 1) return { cols: 1, rows: 1 };
   if (count === 2) return { cols: 2, rows: 1 };
   if (count === 3) return { cols: 3, rows: 1 };
   if (count === 4) return { cols: 2, rows: 2 };
 
-  const estimatedCols = Math.ceil(Math.sqrt((count * CANVAS_WIDTH) / CANVAS_HEIGHT));
+  const estimatedCols = Math.ceil(Math.sqrt((count * CANVAS_WIDTH) / BASE_CANVAS_HEIGHT));
   const cols = Math.max(2, estimatedCols);
   const rows = Math.ceil(count / cols);
   return { cols, rows };
@@ -103,10 +53,12 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
 
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
-  const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
 
   const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
-  const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
+  const baseUsableHeight = BASE_CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
+  const tileHeight = Math.floor((baseUsableHeight - TILE_GAP * (rows - 1)) / rows);
+  const contentHeight = rows * tileHeight + (rows - 1) * TILE_GAP;
+  const canvasHeight = OUTER_MARGIN_TOP + contentHeight + OUTER_MARGIN_BOTTOM;
 
   const composites: sharp.OverlayOptions[] = [];
 
@@ -137,10 +89,10 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     }
   }
 
-  const composed = await sharp({
+  return sharp({
     create: {
       width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
+      height: canvasHeight,
       channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
@@ -148,6 +100,4 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     .composite(composites)
     .png({ compressionLevel: 9, palette: true, quality: 90 })
     .toBuffer();
-
-  return cropTransparentRowsKeepingWidth(composed);
 }
