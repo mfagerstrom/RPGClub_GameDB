@@ -141,29 +141,53 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     const rowWidth = rowItems.length * tileWidth + (rowItems.length - 1) * TILE_GAP;
     const rowXOffset = OUTER_MARGIN_SIDE + Math.floor((usableWidth - rowWidth) / 2);
     const top = OUTER_MARGIN_TOP + rowIndex * (tileHeight + TILE_GAP);
+    const rowRenderData: Array<{
+      cover: IVoteImageCover;
+      itemIndex: number;
+      renderedWidth: number;
+      renderedHeight: number;
+      slackX: number;
+      slackY: number;
+    }> = [];
 
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
+      const metadata = await sharp(cover.imageData).metadata();
+      const sourceWidth = metadata.width ?? tileWidth;
+      const sourceHeight = metadata.height ?? tileHeight;
+      const containScale = Math.min(tileWidth / sourceWidth, tileHeight / sourceHeight);
+      const renderedWidth = Math.max(1, Math.floor(sourceWidth * containScale));
+      const renderedHeight = Math.max(1, Math.floor(sourceHeight * containScale));
+      const slackX = Math.max(0, tileWidth - renderedWidth);
+      const slackY = Math.max(0, tileHeight - renderedHeight);
+      rowRenderData.push({
+        cover,
+        itemIndex,
+        renderedWidth,
+        renderedHeight,
+        slackX,
+        slackY,
+      });
+    }
+
+    const rowHasLargeSlack = rowRenderData.some((entry) => entry.slackX > TILE_GAP || entry.slackY > TILE_GAP);
+    const rowShiftX = rowHasLargeSlack
+      ? (rowIndex % 2 === 0 ? 1 : -1) * Math.floor(TILE_GAP / 2)
+      : 0;
+
+    for (const item of rowRenderData) {
+      const cover = item.cover;
+      const itemIndex = item.itemIndex;
       const baseLeft = rowXOffset + itemIndex * (tileWidth + TILE_GAP);
       const targetTileWidth = tileWidth;
       const targetTileHeight = tileHeight;
-      const metadata = await sharp(cover.imageData).metadata();
-      const sourceWidth = metadata.width ?? targetTileWidth;
-      const sourceHeight = metadata.height ?? targetTileHeight;
-      const containScale = Math.min(targetTileWidth / sourceWidth, targetTileHeight / sourceHeight);
-      const renderedWidth = Math.max(1, Math.floor(sourceWidth * containScale));
-      const renderedHeight = Math.max(1, Math.floor(sourceHeight * containScale));
-      const slackX = Math.max(0, targetTileWidth - renderedWidth);
-      const slackY = Math.max(0, targetTileHeight - renderedHeight);
-      const hasLargeSlack = slackX > TILE_GAP || slackY > TILE_GAP;
+      const hasLargeSlack = item.slackX > TILE_GAP || item.slackY > TILE_GAP;
       const checkerDirection = ((rowIndex + itemIndex) % 2 === 0) ? 1 : -1;
-      const maxShiftX = Math.max(0, Math.floor((slackX - TILE_GAP) / 2));
-      const maxShiftY = Math.max(0, Math.floor((slackY - TILE_GAP) / 2));
-      const checkerShiftX = hasLargeSlack ? checkerDirection * maxShiftX : 0;
+      const maxShiftY = Math.max(0, Math.floor((item.slackY - TILE_GAP) / 2));
       const checkerShiftY = hasLargeSlack ? checkerDirection * maxShiftY : 0;
       const left = baseLeft +
         Math.floor((tileWidth - targetTileWidth) / 2) +
-        checkerShiftX;
+        rowShiftX;
       const adjustedTop = top +
         Math.floor((tileHeight - targetTileHeight) / 2) +
         checkerShiftY;
