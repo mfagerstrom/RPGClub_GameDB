@@ -60,6 +60,19 @@ function getCustomSlots(count: number): { cols: number; rows: number; slots: Slo
       ],
     };
   }
+  if (count === 5) {
+    return {
+      cols: 3,
+      rows: 2,
+      slots: [
+        { col: 0, row: 0 },
+        { col: 1, row: 0 },
+        { col: 2, row: 0 },
+        { col: 0.5, row: 1 },
+        { col: 1.5, row: 1 },
+      ],
+    };
+  }
   if (count === 6) {
     return {
       cols: 6,
