@@ -65,7 +65,8 @@ function buildHeaderOverlaySvg(
   const subtitle = "Nominations";
   const dynamicFontSize = estimateHeaderFontSize(plainLabel);
   const subtitleFontSize = Math.max(24, Math.floor(dynamicFontSize * 0.6));
-  const yPosition = singleRowLayout ? "88%" : "50%";
+  const mainY = singleRowLayout ? Math.floor(CANVAS_HEIGHT * 0.84) : Math.floor(CANVAS_HEIGHT * 0.48);
+  const subtitleY = mainY + Math.floor(dynamicFontSize * 0.95);
   const svg = `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="headerGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -83,7 +84,7 @@ function buildHeaderOverlaySvg(
   </defs>
   <text
     x="50%"
-    y="${yPosition}"
+    y="${mainY}"
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Arial, Helvetica, sans-serif"
@@ -95,8 +96,7 @@ function buildHeaderOverlaySvg(
     filter="url(#headerGlow)">${label}</text>
   <text
     x="50%"
-    y="${yPosition}"
-    dy="${Math.floor(dynamicFontSize * 0.62)}"
+    y="${subtitleY}"
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Arial, Helvetica, sans-serif"
