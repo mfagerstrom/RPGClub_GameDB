@@ -3577,6 +3577,10 @@ export class NowPlayingCommand {
     session: { userId: string; query: string; note: string | null },
     mode: "reply" | "update",
   ): Promise<void> {
+    if (mode === "update" && "deferUpdate" in interaction) {
+      await safeDeferUpdate(interaction);
+    }
+
     try {
       const searchRes = await igdbService.searchGames(session.query);
       if (!searchRes.results.length) {
@@ -3586,9 +3590,9 @@ export class NowPlayingCommand {
           ),
         );
         if (mode === "update" && "update" in interaction) {
-          await interaction.update({ components: [container] });
+          await safeUpdate(interaction, { components: [container] });
         } else {
-          await interaction.reply({
+          await safeReply(interaction, {
             components: [container],
             flags: buildComponentsV2Flags(true),
           });
@@ -3609,6 +3613,7 @@ export class NowPlayingCommand {
 
       const { components } = createIgdbSession(session.userId, opts, async (sel, igdbId) => {
         try {
+          await safeDeferUpdate(sel);
           const imported = await this.importGameFromIgdb(igdbId);
           const sourceSessionId = `np-igdb-add-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
           await this.promptNowPlayingAddPlatformSelection(
@@ -3639,9 +3644,9 @@ export class NowPlayingCommand {
         )
         .addActionRowComponents(components.map((row) => row.toJSON()));
       if (mode === "update" && "update" in interaction) {
-        await interaction.update({ components: [container] });
+        await safeUpdate(interaction, { components: [container] });
       } else {
-        await interaction.reply({
+        await safeReply(interaction, {
           components: [container],
           flags: buildComponentsV2Flags(true),
         });
@@ -3652,9 +3657,9 @@ export class NowPlayingCommand {
         new TextDisplayBuilder().setContent(msg),
       );
       if (mode === "update" && "update" in interaction) {
-        await interaction.update({ components: [container] });
+        await safeUpdate(interaction, { components: [container] });
       } else {
-        await interaction.reply({
+        await safeReply(interaction, {
           components: [container],
           flags: buildComponentsV2Flags(true),
         });
