@@ -149,7 +149,7 @@ const nowPlayingListContexts = new Map<string, NowPlayingListContext>();
 type NowPlayingMessageComponents = Array<
   ContainerBuilder | MediaGalleryBuilder | ActionRowBuilder<ButtonBuilder>
 >;
-type NowPlayingListComponents = Array<ContainerBuilder | MediaGalleryBuilder>;
+type NowPlayingListComponents = ContainerBuilder[];
 
 function buildComponentsV2Flags(isEphemeral: boolean): number {
   return (isEphemeral ? MessageFlags.Ephemeral : 0) | COMPONENTS_V2_FLAG;
@@ -3457,6 +3457,18 @@ export class NowPlayingCommand {
     imageUrl: string | null,
   ): NowPlayingListComponents {
     const container = new ContainerBuilder();
+    if (imageUrl) {
+      container.addMediaGalleryComponents(
+        new MediaGalleryBuilder().addItems(
+          new MediaGalleryItemBuilder()
+            .setURL(imageUrl)
+            .setDescription("Now Playing image"),
+        ),
+      );
+      container.addSeparatorComponents(
+        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(false),
+      );
+    }
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`));
 
     const showEditButton = isOwnList && isEphemeral;
@@ -3497,15 +3509,7 @@ export class NowPlayingCommand {
         container.addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
       }
     });
-    if (!imageUrl) {
-      return [container];
-    }
-    const imageComponent = new MediaGalleryBuilder().addItems(
-      new MediaGalleryItemBuilder()
-        .setURL(imageUrl)
-        .setDescription("Now Playing image"),
-    );
-    return [imageComponent, container];
+    return [container];
   }
 
   private trimTextDisplayContent(content: string): string {

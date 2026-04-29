@@ -17,8 +17,8 @@ export interface IComposeVoteImageParams {
 const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
 const OUTER_MARGIN_TOP = 0;
-const OUTER_MARGIN_BOTTOM = 10;
-const OUTER_MARGIN_SIDE = 5;
+const OUTER_MARGIN_BOTTOM = 0;
+const OUTER_MARGIN_SIDE = 0;
 const TILE_GAP = 5;
 
 type GridDimensions = {
