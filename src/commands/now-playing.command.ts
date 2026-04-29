@@ -2804,6 +2804,17 @@ export class NowPlayingCommand {
 
     const selectedUserId = interaction.values?.[0];
     if (!selectedUserId) return;
+    const isEphemeral = interaction.message.flags?.has(MessageFlags.Ephemeral) ?? false;
+
+    const loadingContainer = new ContainerBuilder().addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        "## Now Loading\nGenerating cover layout and loading the selected member list...",
+      ),
+    );
+    await safeReply(interaction, {
+      components: [loadingContainer],
+      flags: buildComponentsV2Flags(isEphemeral),
+    });
 
     const entries = await Member.getNowPlaying(selectedUserId);
     const target =
@@ -2819,7 +2830,6 @@ export class NowPlayingCommand {
         "Now Playing - Everyone",
         `No Now Playing entries found for <@${selectedUserId}>.`,
       );
-      const isEphemeral = interaction.message.flags?.has(MessageFlags.Ephemeral) ?? false;
       await safeUpdate(interaction, {
         components: [container, ...(selectRow ? [selectRow] : [])],
         flags: buildComponentsV2Flags(isEphemeral),
@@ -2829,7 +2839,6 @@ export class NowPlayingCommand {
 
     const sortedEntries = getDisplayNowPlayingEntries(entries);
     const displayName = target.displayName ?? target.username ?? "User";
-    const isEphemeral = interaction.message.flags?.has(MessageFlags.Ephemeral) ?? false;
     const payload = await this.buildNowPlayingListPayload(
       target,
       sortedEntries,

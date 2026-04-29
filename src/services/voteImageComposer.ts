@@ -51,12 +51,12 @@ function getCustomSlots(count: number): { cols: number; rows: number; slots: Slo
   if (count === 4) {
     return {
       cols: 4,
-      rows: 2,
+      rows: 1,
       slots: [
         { col: 0, row: 0 },
+        { col: 1, row: 0 },
         { col: 2, row: 0 },
-        { col: 1, row: 1 },
-        { col: 3, row: 1 },
+        { col: 3, row: 0 },
       ],
     };
   }
