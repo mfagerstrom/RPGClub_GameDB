@@ -198,11 +198,12 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
   const composites: sharp.OverlayOptions[] = [];
   const tileGap = TILE_GAP;
+  const rowGap = orderedCovers.length === 6 ? 0 : tileGap;
   const tileWidth = custom?.cols === 2
     ? Math.floor((usableWidth - tileGap) / 2)
     : Math.floor((usableWidthForTiles - tileGap * (cols - 1)) / cols);
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
-  const tileHeight = Math.floor((usableHeight - tileGap * (rows - 1)) / rows);
+  const tileHeight = Math.floor((usableHeight - rowGap * (rows - 1)) / rows);
 
   for (let i = 0; i < orderedCovers.length; i += 1) {
     const cover = orderedCovers[i];
@@ -213,7 +214,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     const rawLeft = custom?.cols === 2 && slot.col === 1
       ? CANVAS_WIDTH - OUTER_MARGIN_SIDE - tileWidth
       : OUTER_MARGIN_SIDE + slot.col * (tileWidth + tileGap) + rowShiftX;
-    const rawTop = OUTER_MARGIN_TOP + slot.row * (tileHeight + tileGap);
+    const rawTop = OUTER_MARGIN_TOP + slot.row * (tileHeight + rowGap);
     const left = Math.round(rawLeft);
     const top = Math.round(rawTop);
 
