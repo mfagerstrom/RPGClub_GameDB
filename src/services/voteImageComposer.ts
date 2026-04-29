@@ -87,6 +87,21 @@ function getCustomSlots(count: number): { cols: number; rows: number; slots: Slo
       ],
     };
   }
+  if (count === 7) {
+    return {
+      cols: 4,
+      rows: 2,
+      slots: [
+        { col: 0, row: 0 },
+        { col: 1, row: 0 },
+        { col: 2, row: 0 },
+        { col: 3, row: 0 },
+        { col: 0.5, row: 1 },
+        { col: 1.5, row: 1 },
+        { col: 2.5, row: 1 },
+      ],
+    };
+  }
   return null;
 }
 
@@ -221,6 +236,9 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     const resized = await sharp(cover.imageData)
       .resize(tileWidth, tileHeight, {
         fit: "contain",
+        position: orderedCovers.length === 6
+          ? (slot.row === 0 ? "south" : "north")
+          : "centre",
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       })
       .png({ compressionLevel: 9, palette: true, quality: 90 })
