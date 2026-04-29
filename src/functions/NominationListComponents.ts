@@ -17,6 +17,7 @@ import { SeparatorSpacingSize } from "discord-api-types/v10";
 import type { INominationEntry } from "../classes/Nomination.js";
 import Game from "../classes/Game.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
+import { composeVoteImage, type VoteImageType } from "../services/voteImageComposer.js";
 
 const MAX_THUMBNAILS = 10;
 const MAX_SECTIONS_PER_CONTAINER = 10;
@@ -46,7 +47,9 @@ export async function buildNominationListPayload(
   altLayout: boolean,
   options?: { includeDetailSelect?: boolean },
 ): Promise<NominationListPayload> {
-  const { files, thumbnailsByGameId } = await buildNominationAttachments(
+  const { files, thumbnailsByGameId, voteImageUrl } = await buildNominationAttachments(
+    kindLabel,
+    window.targetRound,
     nominations,
     MAX_THUMBNAILS,
   );
@@ -56,6 +59,7 @@ export async function buildNominationListPayload(
     window,
     nominations,
     thumbnailsByGameId,
+    voteImageUrl,
     altLayout,
     options?.includeDetailSelect ?? true,
   );
@@ -68,14 +72,13 @@ function buildNominationContainers(
   window: NominationWindow,
   nominations: INominationEntry[],
   thumbnailsByGameId: Map<number, string>,
+  voteImageUrl: string | null,
   altLayout: boolean,
   includeDetailSelect: boolean,
 ): Array<ContainerBuilder | ActionRowBuilder<StringSelectMenuBuilder>> {
   const containers: ContainerBuilder[] = [];
   let container = new ContainerBuilder();
-  container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(buildHeaderContent(kindLabel, window)),
-  );
+  addVoteImageToContainer(container, voteImageUrl);
   container.addSeparatorComponents(
     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true),
   );
@@ -98,11 +101,7 @@ function buildNominationContainers(
     if (sectionCount >= MAX_SECTIONS_PER_CONTAINER) {
       containers.push(container);
       container = new ContainerBuilder();
-      container.addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          buildContinuationHeader(kindLabel, window.targetRound),
-        ),
-      );
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent("## Continued"));
       container.addSeparatorComponents(
         new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true),
       );
@@ -188,17 +187,6 @@ function buildNominationText(nomination: INominationEntry): string {
   return `### ${nomination.gameTitle}\n<@${nomination.userId}> nominated this title, but did not provide a reason.`;
 }
 
-function buildHeaderContent(
-  kindLabel: string,
-  window: NominationWindow,
-): string {
-  return `## ${kindLabel} Nominations - Round ${window.targetRound}`;
-}
-
-function buildContinuationHeader(kindLabel: string, round: number): string {
-  return `## ${kindLabel} Nominations - Round ${round} continued`;
-}
-
 function buildFooterContent(commandLabel: string, window: NominationWindow): string {
   const voteLabel = formatDate(window.nextVoteAt);
   return `-# Round ${window.targetRound} voting will open on ${voteLabel}. Nominate a game (or edit your existing nomination) with ${commandLabel}.`;
@@ -268,11 +256,18 @@ function formatDate(date: Date): string {
 }
 
 async function buildNominationAttachments(
+  kindLabel: string,
+  roundNumber: number,
   nominations: INominationEntry[],
   maxImages: number,
-): Promise<{ files: AttachmentBuilder[]; thumbnailsByGameId: Map<number, string> }> {
+): Promise<{
+  files: AttachmentBuilder[];
+  thumbnailsByGameId: Map<number, string>;
+  voteImageUrl: string | null;
+}> {
   const files: AttachmentBuilder[] = [];
   const thumbnailsByGameId = new Map<number, string>();
+  const covers: Array<{ gameId: number; title: string; imageData: Buffer }> = [];
   const seen = new Set<number>();
 
   for (const nomination of nominations) {
@@ -285,13 +280,59 @@ async function buildNominationAttachments(
     if (!game?.imageData) {
       continue;
     }
+    covers.push({
+      gameId,
+      title: nomination.gameTitle,
+      imageData: game.imageData,
+    });
     if (files.length >= maxImages) {
-      break;
+      continue;
     }
     const filename = `nomination_${gameId}.png`;
     files.push(new AttachmentBuilder(game.imageData, { name: filename }));
     thumbnailsByGameId.set(gameId, `attachment://${filename}`);
   }
 
-  return { files, thumbnailsByGameId };
+  const voteImageUrl = await appendVoteImageAttachment(files, kindLabel, roundNumber, covers);
+  return { files, thumbnailsByGameId, voteImageUrl };
+}
+
+async function appendVoteImageAttachment(
+  files: AttachmentBuilder[],
+  kindLabel: string,
+  roundNumber: number,
+  covers: Array<{ gameId: number; title: string; imageData: Buffer }>,
+): Promise<string | null> {
+  const voteType = toVoteImageType(kindLabel);
+  if (!voteType || !covers.length) {
+    return null;
+  }
+
+  const imageBuffer = await composeVoteImage({
+    roundNumber,
+    voteType,
+    covers,
+  });
+  const filename = `noms_vote_${voteType.toLowerCase()}_round_${roundNumber}.png`;
+  files.push(new AttachmentBuilder(imageBuffer, { name: filename }));
+  return `attachment://${filename}`;
+}
+
+function toVoteImageType(kindLabel: string): VoteImageType | null {
+  if (kindLabel === "GOTM" || kindLabel === "NR-GOTM") {
+    return kindLabel;
+  }
+  return null;
+}
+
+function addVoteImageToContainer(container: ContainerBuilder, voteImageUrl: string | null): void {
+  if (!voteImageUrl) {
+    return;
+  }
+  const gallery = new MediaGalleryBuilder().addItems(
+    new MediaGalleryItemBuilder()
+      .setURL(voteImageUrl)
+      .setDescription("Vote image"),
+  );
+  container.addMediaGalleryComponents(gallery);
 }
