@@ -1614,6 +1614,15 @@ export class NowPlayingCommand {
     }
 
     await safeDeferUpdate(interaction);
+    const loadingContainer = new ContainerBuilder().addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        "## Now Loading\nGenerating cover layout and loading the selected member list...",
+      ),
+    );
+    await safeUpdate(interaction, {
+      components: [loadingContainer],
+      flags: buildComponentsV2Flags(true),
+    });
 
     try {
       await Member.addNowPlaying(session.userId, session.gameId, platformId, session.note);
