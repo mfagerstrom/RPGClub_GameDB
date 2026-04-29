@@ -23,7 +23,7 @@ const HEADER_FONT_SIZE_MAX = 220;
 const HEADER_TARGET_WIDTH_RATIO = 0.8;
 const HEADER_SIDE_SAFE_PADDING = 100;
 const HEADER_BAR_HEIGHT = 130;
-const HEADER_BAR_GAP = 10;
+const HEADER_BAR_GAP = 0;
 
 type GridDimensions = {
   cols: number;
@@ -111,15 +111,11 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN * 2;
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN * 2;
-  const hasSingleRowLayout = rows === 1;
-  const topRowCount = hasSingleRowLayout ? 1 : Math.ceil(rows / 2);
-  const contentHeightExcludingBar = usableHeight - HEADER_BAR_HEIGHT - HEADER_BAR_GAP * 2;
+  const contentHeightExcludingBar = usableHeight - HEADER_BAR_HEIGHT - HEADER_BAR_GAP;
 
   const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
   const tileHeight = Math.floor((contentHeightExcludingBar - TILE_GAP * (rows - 1)) / rows);
-  const headerBarTop = hasSingleRowLayout
-    ? CANVAS_HEIGHT - OUTER_MARGIN - HEADER_BAR_HEIGHT
-    : OUTER_MARGIN + topRowCount * (tileHeight + TILE_GAP) + HEADER_BAR_GAP;
+  const headerBarTop = CANVAS_HEIGHT - OUTER_MARGIN - HEADER_BAR_HEIGHT;
 
   const composites: sharp.OverlayOptions[] = [];
 
@@ -132,10 +128,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
 
     const rowWidth = rowItems.length * tileWidth + (rowItems.length - 1) * TILE_GAP;
     const rowXOffset = OUTER_MARGIN + Math.floor((usableWidth - rowWidth) / 2);
-    const offsetAfterBar = !hasSingleRowLayout && rowIndex >= topRowCount
-      ? HEADER_BAR_HEIGHT + HEADER_BAR_GAP * 2
-      : 0;
-    const top = OUTER_MARGIN + rowIndex * (tileHeight + TILE_GAP) + offsetAfterBar;
+    const top = OUTER_MARGIN + rowIndex * (tileHeight + TILE_GAP);
 
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
@@ -177,7 +170,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
       width: CANVAS_WIDTH,
       height: CANVAS_HEIGHT,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      background: { r: 0, g: 0, b: 0, alpha: 1 },
     },
   })
     .composite(composites)
