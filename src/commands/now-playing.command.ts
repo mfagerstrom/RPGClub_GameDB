@@ -44,6 +44,7 @@ import { SeparatorSpacingSize } from "discord-api-types/v10";
 import Member, { type IMemberNowPlayingEntry } from "../classes/Member.js";
 import {
   safeDeferReply,
+  safeDeferUpdate,
   safeReply,
   safeUpdate,
   sanitizeUserInput,
@@ -1612,6 +1613,8 @@ export class NowPlayingCommand {
       return;
     }
 
+    await safeDeferUpdate(interaction);
+
     try {
       await Member.addNowPlaying(session.userId, session.gameId, platformId, session.note);
       nowPlayingAddPlatformSessions.delete(platformSessionId);
@@ -1630,7 +1633,7 @@ export class NowPlayingCommand {
         const container = new ContainerBuilder().addTextDisplayComponents(
           new TextDisplayBuilder().setContent("Now Playing list updated."),
         );
-        await interaction.update({
+        await safeUpdate(interaction, {
           components: [container],
           flags: buildComponentsV2Flags(true),
         });
@@ -1641,7 +1644,7 @@ export class NowPlayingCommand {
           payload.components,
           list.length,
         );
-        await interaction.update({
+        await safeUpdate(interaction, {
           components,
           files: payload.files,
           flags: buildComponentsV2Flags(true),
@@ -1652,7 +1655,7 @@ export class NowPlayingCommand {
       const container = new ContainerBuilder().addTextDisplayComponents(
         new TextDisplayBuilder().setContent(`Could not add to Now Playing: ${msg}`),
       );
-      await interaction.update({
+      await safeUpdate(interaction, {
         components: [container],
         flags: buildComponentsV2Flags(true),
       });
