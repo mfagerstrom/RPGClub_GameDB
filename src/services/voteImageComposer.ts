@@ -27,6 +27,20 @@ type GridDimensions = {
   rows: number;
 };
 
+function shouldUseCoverFitForFourGrid(
+  sourceWidth: number,
+  sourceHeight: number,
+  tileWidth: number,
+  tileHeight: number,
+): boolean {
+  if (sourceWidth <= 0 || sourceHeight <= 0 || tileWidth <= 0 || tileHeight <= 0) {
+    return false;
+  }
+  const sourceAspect = sourceWidth / sourceHeight;
+  const tileAspect = tileWidth / tileHeight;
+  return sourceAspect < (tileAspect * 0.72);
+}
+
 async function cropTransparentRowsKeepingWidth(imageBuffer: Buffer): Promise<Buffer> {
   const { data, info } = await sharp(imageBuffer)
     .ensureAlpha()
@@ -123,6 +137,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     ? [...params.covers]
     : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
+  const isFourGrid = orderedCovers.length === 4 && cols === 2 && rows === 2;
 
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
 
@@ -146,10 +161,20 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
       const left = rowXOffset + itemIndex * (tileWidth + TILE_GAP);
+      const metadata = await sharp(cover.imageData).metadata();
+      const fitMode = isFourGrid &&
+        shouldUseCoverFitForFourGrid(
+          metadata.width ?? 0,
+          metadata.height ?? 0,
+          tileWidth,
+          tileHeight,
+        )
+        ? "cover"
+        : "contain";
 
       const resized = await sharp(cover.imageData)
         .resize(tileWidth, tileHeight, {
-          fit: "contain",
+          fit: fitMode,
           background: { r: 0, g: 0, b: 0, alpha: 0 },
         })
         .png({ compressionLevel: 9, palette: true, quality: 90 })
