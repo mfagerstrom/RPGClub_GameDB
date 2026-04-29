@@ -62,7 +62,9 @@ function buildHeaderOverlaySvg(
 ): Buffer {
   const plainLabel = `[${voteType}] Round ${roundNumber}`;
   const label = escapeXml(`[${voteType}] Round ${roundNumber}`);
+  const subtitle = "Nominations";
   const dynamicFontSize = estimateHeaderFontSize(plainLabel);
+  const subtitleFontSize = Math.max(24, Math.floor(dynamicFontSize * 0.6));
   const yPosition = singleRowLayout ? "88%" : "50%";
   const svg = `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -91,6 +93,19 @@ function buildHeaderOverlaySvg(
     stroke="#000000"
     stroke-width="3"
     filter="url(#headerGlow)">${label}</text>
+  <text
+    x="50%"
+    y="${yPosition}"
+    dy="${Math.floor(dynamicFontSize * 0.62)}"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="${subtitleFontSize}"
+    font-weight="900"
+    fill="#FFFFFF"
+    stroke="#000000"
+    stroke-width="2"
+    filter="url(#headerGlow)">${subtitle}</text>
 </svg>`;
 
   return Buffer.from(svg);
