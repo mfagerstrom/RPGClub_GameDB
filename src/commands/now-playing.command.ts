@@ -146,7 +146,9 @@ type NowPlayingListContext = {
   messageId: string;
 };
 const nowPlayingListContexts = new Map<string, NowPlayingListContext>();
-type NowPlayingMessageComponents = Array<ContainerBuilder | ActionRowBuilder<ButtonBuilder>>;
+type NowPlayingMessageComponents = Array<
+  ContainerBuilder | MediaGalleryBuilder | ActionRowBuilder<ButtonBuilder>
+>;
 type NowPlayingListComponents = Array<ContainerBuilder | MediaGalleryBuilder>;
 
 function buildComponentsV2Flags(isEphemeral: boolean): number {
@@ -2823,23 +2825,18 @@ export class NowPlayingCommand {
 
     const sortedEntries = getDisplayNowPlayingEntries(entries);
     const displayName = target.displayName ?? target.username ?? "User";
-    const { files, thumbnailsByGameId } = await this.buildNowPlayingAttachments(
-      sortedEntries,
-      NOW_PLAYING_GALLERY_MAX,
-    );
     const isEphemeral = interaction.message.flags?.has(MessageFlags.Ephemeral) ?? false;
-    const containers = this.buildNowPlayingEntryContainers(
-      `${displayName}'s Now Playing List`,
+    const payload = await this.buildNowPlayingListPayload(
+      target,
       sortedEntries,
       interaction.guildId,
-      thumbnailsByGameId,
-      selectedUserId,
+      `${displayName}'s Now Playing List`,
       false,
       isEphemeral,
     );
     await safeUpdate(interaction, {
-      components: [...containers, ...(selectRow ? [selectRow] : [])],
-      files,
+      components: [...payload.components, ...(selectRow ? [selectRow] : [])],
+      files: payload.files,
       flags: buildComponentsV2Flags(isEphemeral),
     });
   }
@@ -3373,7 +3370,7 @@ export class NowPlayingCommand {
   private withNowPlayingActions(
     title: string,
     ownerId: string,
-    components: ContainerBuilder[],
+    components: NowPlayingListComponents,
     listCount: number,
   ): NowPlayingMessageComponents {
     if (title !== "Your Now Playing List") {
