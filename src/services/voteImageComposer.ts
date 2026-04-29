@@ -83,6 +83,28 @@ function resolveGridDimensions(count: number): GridDimensions {
   if (count === 3) return { cols: 3, rows: 1 };
   if (count === 4) return { cols: 2, rows: 2 };
 
+  if (count % 2 === 0) {
+    const targetRatio = CANVAS_WIDTH / CANVAS_HEIGHT;
+    let best: GridDimensions | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (let rows = 1; rows <= Math.floor(Math.sqrt(count)); rows += 1) {
+      if (count % rows !== 0) {
+        continue;
+      }
+      const cols = count / rows;
+      const ratioScore = Math.abs((cols / rows) - targetRatio);
+      if (ratioScore < bestScore) {
+        best = { cols, rows };
+        bestScore = ratioScore;
+      }
+    }
+
+    if (best) {
+      return best;
+    }
+  }
+
   const estimatedCols = Math.ceil(Math.sqrt((count * CANVAS_WIDTH) / CANVAS_HEIGHT));
   const cols = Math.max(2, estimatedCols);
   const rows = Math.ceil(count / cols);
