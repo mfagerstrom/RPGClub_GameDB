@@ -21,6 +21,7 @@ const OUTER_MARGIN_TOP = 0;
 const OUTER_MARGIN_BOTTOM = 0;
 const OUTER_MARGIN_SIDE = 0;
 const TILE_GAP = 5;
+const EVEN_ROW_STAGGER_MAX = 36;
 
 type GridDimensions = {
   cols: number;
@@ -123,9 +124,16 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     ? [...params.covers]
     : [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
+  const shouldStaggerRows = orderedCovers.length % 2 === 0 && rows > 1;
   const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
+  const rowStaggerAmount = shouldStaggerRows
+    ? Math.min(EVEN_ROW_STAGGER_MAX, Math.max(10, Math.floor(usableWidth * 0.025)))
+    : 0;
+  const usableWidthForTiles = shouldStaggerRows
+    ? Math.max(cols, usableWidth - rowStaggerAmount * 2)
+    : usableWidth;
 
-  const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
+  const tileWidth = Math.floor((usableWidthForTiles - TILE_GAP * (cols - 1)) / cols);
   const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
   const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
 
@@ -170,9 +178,8 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
       });
     }
 
-    const rowHasLargeSlack = rowRenderData.some((entry) => entry.slackX > TILE_GAP || entry.slackY > TILE_GAP);
-    const rowShiftX = rowHasLargeSlack
-      ? (rowIndex % 2 === 0 ? 1 : -1) * Math.floor(TILE_GAP / 2)
+    const rowShiftX = shouldStaggerRows
+      ? ((rowIndex % 2 === 0 ? -1 : 1) * rowStaggerAmount)
       : 0;
 
     for (const item of rowRenderData) {
