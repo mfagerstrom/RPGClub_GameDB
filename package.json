@@ -45,6 +45,7 @@
     "oracledb": "^6.10.0",
     "pm2": "^6.0.11",
     "rss-parser": "^3.13.0",
+    "sharp": "^0.34.5",
     "typescript-eslint": "^8.46.1",
     "user-agents": "^1.1.325"
   },
