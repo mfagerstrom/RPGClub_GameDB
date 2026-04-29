@@ -51,7 +51,7 @@ export function buildLiveStreamModalCustomId(userId: string): string {
 export function buildLiveStreamModal(customId: string): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(customId)
-    .setTitle("Create Live Stream")
+    .setTitle("Create Live Event and Thread")
     .addActionRowComponents(
       new ModalActionRowBuilder<ModalTextInputBuilder>().addComponents(
         new ModalTextInputBuilder()
