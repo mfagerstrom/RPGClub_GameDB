@@ -16,7 +16,9 @@ export interface IComposeVoteImageParams {
 
 const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
-const OUTER_MARGIN = 5;
+const OUTER_MARGIN_TOP = 0;
+const OUTER_MARGIN_BOTTOM = 10;
+const OUTER_MARGIN_SIDE = 5;
 const TILE_GAP = 5;
 
 type GridDimensions = {
@@ -47,8 +49,8 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   const orderedCovers = [...params.covers].sort((a, b) => a.title.localeCompare(b.title));
   const { cols, rows } = resolveGridDimensions(orderedCovers.length);
 
-  const usableWidth = CANVAS_WIDTH - OUTER_MARGIN * 2;
-  const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN * 2;
+  const usableWidth = CANVAS_WIDTH - OUTER_MARGIN_SIDE * 2;
+  const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
 
   const tileWidth = Math.floor((usableWidth - TILE_GAP * (cols - 1)) / cols);
   const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
@@ -63,8 +65,8 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     }
 
     const rowWidth = rowItems.length * tileWidth + (rowItems.length - 1) * TILE_GAP;
-    const rowXOffset = OUTER_MARGIN + Math.floor((usableWidth - rowWidth) / 2);
-    const top = OUTER_MARGIN + rowIndex * (tileHeight + TILE_GAP);
+    const rowXOffset = OUTER_MARGIN_SIDE + Math.floor((usableWidth - rowWidth) / 2);
+    const top = OUTER_MARGIN_TOP + rowIndex * (tileHeight + TILE_GAP);
 
     for (let itemIndex = 0; itemIndex < rowItems.length; itemIndex += 1) {
       const cover = rowItems[itemIndex];
