@@ -2800,8 +2800,6 @@ export class NowPlayingCommand {
 
   @SelectMenuComponent({ id: /^nowplaying-all-select(?::v1)?$/ })
   async handleNowPlayingAllSelect(interaction: StringSelectMenuInteraction): Promise<void> {
-    await safeDeferUpdate(interaction);
-
     const selectedUserId = interaction.values?.[0];
     if (!selectedUserId) return;
     const isEphemeral = interaction.message.flags?.has(MessageFlags.Ephemeral) ?? false;
@@ -2811,7 +2809,7 @@ export class NowPlayingCommand {
         "## Now Loading\nGenerating cover layout and loading the selected member list...",
       ),
     );
-    await safeReply(interaction, {
+    await safeUpdate(interaction, {
       components: [loadingContainer],
       flags: buildComponentsV2Flags(isEphemeral),
     });
@@ -2830,9 +2828,8 @@ export class NowPlayingCommand {
         "Now Playing - Everyone",
         `No Now Playing entries found for <@${selectedUserId}>.`,
       );
-      await safeReply(interaction, {
+      await interaction.editReply({
         components: [container, ...(selectRow ? [selectRow] : [])],
-        flags: buildComponentsV2Flags(isEphemeral),
       });
       return;
     }
@@ -2847,10 +2844,9 @@ export class NowPlayingCommand {
       false,
       isEphemeral,
     );
-    await safeReply(interaction, {
+    await interaction.editReply({
       components: [...payload.components, ...(selectRow ? [selectRow] : [])],
       files: payload.files,
-      flags: buildComponentsV2Flags(isEphemeral),
     });
   }
 
