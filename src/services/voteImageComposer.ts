@@ -18,7 +18,9 @@ const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
 const OUTER_MARGIN = 5;
 const TILE_GAP = 5;
-const HEADER_FONT_SIZE = 96;
+const HEADER_FONT_SIZE_MIN = 96;
+const HEADER_FONT_SIZE_MAX = 220;
+const HEADER_TARGET_WIDTH_RATIO = 0.8;
 
 type GridDimensions = {
   cols: number;
@@ -46,14 +48,28 @@ function resolveGridDimensions(count: number): GridDimensions {
   return { cols, rows };
 }
 
+function estimateHeaderFontSize(label: string): number {
+  const safeLength = Math.max(1, label.length);
+  const targetWidth = CANVAS_WIDTH * HEADER_TARGET_WIDTH_RATIO;
+  const estimated = Math.floor(targetWidth / (safeLength * 0.58));
+  return Math.max(HEADER_FONT_SIZE_MIN, Math.min(HEADER_FONT_SIZE_MAX, estimated));
+}
+
 function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Buffer {
+  const plainLabel = `[${voteType}] Round ${roundNumber}`;
   const label = escapeXml(`[${voteType}] Round ${roundNumber}`);
+  const dynamicFontSize = estimateHeaderFontSize(plainLabel);
   const svg = `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="headerGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0.9 0" result="darkGlow"/>
       <feMerge>
-        <feMergeNode in="blur"/>
+        <feMergeNode in="darkGlow"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
@@ -64,11 +80,11 @@ function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Bu
     text-anchor="middle"
     dominant-baseline="middle"
     font-family="Arial, Helvetica, sans-serif"
-    font-size="${HEADER_FONT_SIZE}"
-    font-weight="700"
+    font-size="${dynamicFontSize}"
+    font-weight="900"
     fill="#FFFFFF"
     stroke="#000000"
-    stroke-width="2"
+    stroke-width="3"
     filter="url(#headerGlow)">${label}</text>
 </svg>`;
 
