@@ -8,10 +8,8 @@ import {
   ContainerBuilder,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
-  SectionBuilder,
   SeparatorBuilder,
   TextDisplayBuilder,
-  ThumbnailBuilder,
 } from "@discordjs/builders";
 import { SeparatorSpacingSize } from "discord-api-types/v10";
 import type { INominationEntry } from "../classes/Nomination.js";
@@ -19,7 +17,6 @@ import Game from "../classes/Game.js";
 import { COMPONENTS_V2_FLAG } from "../config/flags.js";
 import { composeVoteImage, type VoteImageType } from "../services/voteImageComposer.js";
 
-const MAX_THUMBNAILS = 10;
 const MAX_SECTIONS_PER_CONTAINER = 10;
 const MAX_REASON_LENGTH = 1500;
 const MAX_SELECT_OPTIONS = 25;
@@ -47,18 +44,16 @@ export async function buildNominationListPayload(
   altLayout: boolean,
   options?: { includeDetailSelect?: boolean },
 ): Promise<NominationListPayload> {
-  const { files, thumbnailsByGameId, voteImageUrl } = await buildNominationAttachments(
+  const { files, voteImageUrl } = await buildNominationAttachments(
     kindLabel,
     window.targetRound,
     nominations,
-    MAX_THUMBNAILS,
   );
   const components = buildNominationContainers(
     kindLabel,
     commandLabel,
     window,
     nominations,
-    thumbnailsByGameId,
     voteImageUrl,
     altLayout,
     options?.includeDetailSelect ?? true,
@@ -71,7 +66,6 @@ function buildNominationContainers(
   commandLabel: string,
   window: NominationWindow,
   nominations: INominationEntry[],
-  thumbnailsByGameId: Map<number, string>,
   voteImageUrl: string | null,
   altLayout: boolean,
   includeDetailSelect: boolean,
@@ -115,8 +109,6 @@ function buildNominationContainers(
     addNominationContent(
       container,
       nomination,
-      thumbnailsByGameId.get(nomination.gamedbGameId),
-      altLayout,
     );
     sectionCount += 1;
   });
@@ -135,46 +127,10 @@ function buildNominationContainers(
   return [...containers, ...selectRows];
 }
 
-function buildNominationSection(
-  nomination: INominationEntry,
-  thumbnailUrl: string | undefined,
-): SectionBuilder {
-  const lines = [
-    `### ${nomination.gameTitle}`,
-  ];
-  if (nomination.reason) {
-    lines.push(`<@${nomination.userId}> ${trimReason(nomination.reason)}`);
-  } else {
-    lines.push(`<@${nomination.userId}> nominated this title, but did not provide a reason.`);
-  }
-  const section = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(lines.join("\n")),
-  );
-  if (thumbnailUrl) {
-    section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailUrl));
-  }
-  return section;
-}
-
 function addNominationContent(
   container: ContainerBuilder,
   nomination: INominationEntry,
-  thumbnailUrl: string | undefined,
-  altLayout: boolean,
 ): void {
-  if (!altLayout && thumbnailUrl) {
-    const section = buildNominationSection(nomination, thumbnailUrl);
-    container.addSectionComponents(section);
-    return;
-  }
-  if (altLayout && thumbnailUrl) {
-    const galleryItem = new MediaGalleryItemBuilder()
-      .setURL(thumbnailUrl)
-      .setDescription(nomination.gameTitle);
-    container.addMediaGalleryComponents(
-      new MediaGalleryBuilder().addItems(galleryItem),
-    );
-  }
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(buildNominationText(nomination)),
   );
@@ -259,14 +215,11 @@ async function buildNominationAttachments(
   kindLabel: string,
   roundNumber: number,
   nominations: INominationEntry[],
-  maxImages: number,
 ): Promise<{
   files: AttachmentBuilder[];
-  thumbnailsByGameId: Map<number, string>;
   voteImageUrl: string | null;
 }> {
   const files: AttachmentBuilder[] = [];
-  const thumbnailsByGameId = new Map<number, string>();
   const covers: Array<{ gameId: number; title: string; imageData: Buffer }> = [];
   const seen = new Set<number>();
 
@@ -285,16 +238,10 @@ async function buildNominationAttachments(
       title: nomination.gameTitle,
       imageData: game.imageData,
     });
-    if (files.length >= maxImages) {
-      continue;
-    }
-    const filename = `nomination_${gameId}.png`;
-    files.push(new AttachmentBuilder(game.imageData, { name: filename }));
-    thumbnailsByGameId.set(gameId, `attachment://${filename}`);
   }
 
   const voteImageUrl = await appendVoteImageAttachment(files, kindLabel, roundNumber, covers);
-  return { files, thumbnailsByGameId, voteImageUrl };
+  return { files, voteImageUrl };
 }
 
 async function appendVoteImageAttachment(

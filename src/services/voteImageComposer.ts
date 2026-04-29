@@ -67,32 +67,17 @@ function buildHeaderOverlaySvg(voteType: VoteImageType, roundNumber: number): Bu
     Math.floor(HEADER_BAR_HEIGHT * 0.58),
   );
   const svg = `<svg width="${CANVAS_WIDTH}" height="${HEADER_BAR_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="headerGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
-      <feColorMatrix in="blur" type="matrix"
-        values="0 0 0 0 0
-                0 0 0 0 0
-                0 0 0 0 0
-                0 0 0 0.9 0" result="darkGlow"/>
-      <feMerge>
-        <feMergeNode in="darkGlow"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
   <text
-    x="50%"
+    x="${HEADER_SIDE_SAFE_PADDING}"
     y="50%"
-    text-anchor="middle"
+    text-anchor="start"
     dominant-baseline="middle"
     font-family="Arial, Helvetica, sans-serif"
     font-size="${dynamicFontSize}"
     font-weight="900"
     fill="#FFFFFF"
     stroke="#000000"
-    stroke-width="3"
-    filter="url(#headerGlow)">${label}</text>
+    stroke-width="3">${label}</text>
 </svg>`;
 
   return Buffer.from(svg);
@@ -147,19 +132,6 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
   }
 
   composites.push({
-    input: {
-      create: {
-        width: CANVAS_WIDTH,
-        height: HEADER_BAR_HEIGHT,
-        channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 1 },
-      },
-    },
-    left: 0,
-    top: headerBarTop,
-  });
-
-  composites.push({
     input: buildHeaderOverlaySvg(params.voteType, params.roundNumber),
     left: 0,
     top: headerBarTop,
@@ -170,7 +142,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
       width: CANVAS_WIDTH,
       height: CANVAS_HEIGHT,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 1 },
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
     .composite(composites)
