@@ -379,6 +379,65 @@ export default class GameSearchSynonym {
     }
   }
 
+  static async createGroupTerms(
+    terms: string[],
+    createdBy: string | null,
+  ): Promise<{ groupId: number; terms: IGameSearchSynonym[] }> {
+    const cleaned: string[] = [];
+    const seen = new Set<string>();
+    for (const term of terms) {
+      const trimmed = term.trim();
+      if (!trimmed) continue;
+      const norm = normalizeSearchTerm(trimmed);
+      if (!norm || seen.has(norm)) continue;
+      seen.add(norm);
+      cleaned.push(trimmed);
+    }
+
+    if (cleaned.length < 2) {
+      throw new Error("A synonym group must contain at least two terms.");
+    }
+
+    const pool = getOraclePool();
+    const connection = await pool.getConnection();
+    try {
+      const groupResult = await connection.execute(
+        `INSERT INTO GAMEDB_SEARCH_SYNONYM_GROUPS (CREATED_BY)
+         VALUES (:createdBy)
+         RETURNING GROUP_ID INTO :groupId`,
+        {
+          createdBy,
+          groupId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+        },
+        { autoCommit: true },
+      );
+      const groupId = Number((groupResult.outBinds as any)?.groupId?.[0]);
+      if (!Number.isInteger(groupId) || groupId <= 0) {
+        throw new Error("Failed to create synonym group.");
+      }
+
+      for (const text of cleaned) {
+        const norm = normalizeSearchTerm(text);
+        await connection.execute(
+          `INSERT INTO GAMEDB_SEARCH_SYNONYMS (GROUP_ID, TERM_TEXT, TERM_NORM, CREATED_BY)
+           VALUES (:groupId, :termText, :termNorm, :createdBy)`,
+          {
+            groupId,
+            termText: text,
+            termNorm: norm,
+            createdBy,
+          },
+          { autoCommit: true },
+        );
+      }
+
+      const savedTerms = await this.listGroupTerms(groupId, connection);
+      return { groupId, terms: savedTerms };
+    } finally {
+      await connection.close();
+    }
+  }
+
   static async deleteSynonym(termId: number): Promise<boolean> {
     const pool = getOraclePool();
     const connection = await pool.getConnection();

@@ -103,6 +103,7 @@ type GameDbHelpTopicId =
   | "refresh-release-info"
   | "audit"
   | "link-versions"
+  | "synonym-add"
   | "synonym-list"
   | "csv-import";
 
@@ -228,7 +229,7 @@ const HELP_TOPICS: HelpTopic[] = [
       "Search, import, and view games from GameDB with IGDB-powered lookups.",
     syntax:
       "Use /gamedb help for subcommands: add, search, view, refresh-release-info, audit, link-versions, " +
-      "synonym-list, csv-import, help.",
+      "synonym-add, synonym-list, csv-import, help.",
     notes:
       "Imports pull titles/covers from IGDB. View shows GOTM/NR-GOTM wins, " +
       "nominations, and related threads for the GameDB id. " +
@@ -826,13 +827,24 @@ const GAMEDB_HELP_TOPICS: GameDbHelpTopic[] = [
       "Linked titles appear under Alternate Versions in /gamedb view.",
   },
   {
+    id: "synonym-add",
+    label: "/gamedb synonym-add",
+    summary: "Quick add one GameDB search synonym group in a single command (admin only).",
+    syntax:
+      "Syntax: /gamedb synonym-add base_term:<string> synonym:<string> " +
+      "[additional_synonyms:<string>] [showinchat:<boolean>]",
+    notes:
+      "Use additional_synonyms to pass comma, pipe, semicolon, or newline separated terms. " +
+      "Duplicate and empty terms are ignored.",
+  },
+  {
     id: "synonym-list",
     label: "/gamedb synonym-list",
     summary: "List GameDB search synonyms (admin only).",
     syntax: "Syntax: /gamedb synonym-list [query:<string>] [showinchat:<boolean>]",
     notes:
       "Returns grouped synonym terms with dropdowns to edit or delete a group, " +
-      "plus an Add New Group button.",
+      "plus an Add New Group button for modal-based entry.",
   },
 ];
 

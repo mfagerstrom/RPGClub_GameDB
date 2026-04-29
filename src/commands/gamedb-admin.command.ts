@@ -44,6 +44,7 @@ import GameSearchSynonymDraft, {
 import axios from "axios";
 import { igdbService } from "../services/IGDB/IgdbService.js";
 import { shouldRenderPrevNextButtons } from "../functions/PaginationUtils.js";
+import { parseSynonymQuickAddTerms } from "./gamedb-synonym.utils.js";
 
 const AUDIT_PAGE_SIZE = 20;
 const AUDIT_VIDEO_MODAL_ID = "audit-video-modal";
@@ -1620,6 +1621,85 @@ export class GameDbAdmin {
       await currentMessage.edit({ embeds: [currentEmbed], components: [finalStopRow] });
     }
     AUTO_ACCEPT_RUNS.delete(runId);
+  }
+
+  @Slash({
+    description: "Quick add one GameDB search synonym group (Admin only)",
+    name: "synonym-add",
+  })
+  async synonymAdd(
+    @SlashOption({
+      description: "Base term for the group",
+      name: "base_term",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+    })
+    baseTerm: string,
+    @SlashOption({
+      description: "Required synonym for the base term",
+      name: "synonym",
+      required: true,
+      type: ApplicationCommandOptionType.String,
+    })
+    synonym: string,
+    @SlashOption({
+      description: "Optional additional synonyms (comma, pipe, semicolon, or newline separated)",
+      name: "additional_synonyms",
+      required: false,
+      type: ApplicationCommandOptionType.String,
+    })
+    additionalSynonyms: string | undefined,
+    @SlashOption({
+      description: "Show in chat (public) instead of ephemeral",
+      name: "showinchat",
+      required: false,
+      type: ApplicationCommandOptionType.Boolean,
+    })
+    showInChat: boolean | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    const isPublic = !!showInChat;
+    await safeDeferReply(interaction, { flags: isPublic ? undefined : MessageFlags.Ephemeral });
+    if (!(await isAdmin(interaction))) return;
+
+    const cleanedBaseTerm = sanitizeUserInput(baseTerm, { preserveNewlines: false });
+    const cleanedSynonym = sanitizeUserInput(synonym, { preserveNewlines: false });
+    const cleanedAdditionalSynonyms = additionalSynonyms
+      ? sanitizeUserInput(additionalSynonyms, { preserveNewlines: true })
+      : undefined;
+
+    const terms = parseSynonymQuickAddTerms(
+      cleanedBaseTerm,
+      cleanedSynonym,
+      cleanedAdditionalSynonyms,
+    );
+    if (terms.length < 2) {
+      await safeReply(interaction, {
+        content:
+          "Invalid input. Provide a base term and synonym with letters or numbers. " +
+          "Additional synonyms can be separated by comma, pipe, semicolon, or newline.",
+        flags: isPublic ? undefined : MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    try {
+      const result = await GameSearchSynonym.createGroupTerms(terms, interaction.user.id);
+      const termList = result.terms.map((term) => `"${term.termText}"`).join(" | ");
+      let content = `Saved synonym group #${result.groupId} with ${result.terms.length} terms:\n${termList}`;
+      if (content.length > 1900) {
+        content = `${content.slice(0, 1900)}...`;
+      }
+      await safeReply(interaction, {
+        content,
+        flags: isPublic ? undefined : MessageFlags.Ephemeral,
+      });
+    } catch (err: any) {
+      await safeReply(interaction, {
+        content: `Failed to save synonym group. ${err?.message ?? "Unknown error."}`,
+        flags: isPublic ? undefined : MessageFlags.Ephemeral,
+      });
+    }
   }
 
   @Slash({
