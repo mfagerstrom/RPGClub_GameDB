@@ -26,6 +26,56 @@ type GridDimensions = {
   rows: number;
 };
 
+async function cropTransparentRowsKeepingWidth(imageBuffer: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(imageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  const alphaOffset = channels - 1;
+
+  let top = 0;
+  let bottom = height - 1;
+
+  const rowHasOpaquePixel = (row: number): boolean => {
+    const rowStart = row * width * channels;
+    const rowEnd = rowStart + width * channels;
+    for (let offset = rowStart + alphaOffset; offset < rowEnd; offset += channels) {
+      if ((data[offset] ?? 0) > 0) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  while (top < height && !rowHasOpaquePixel(top)) {
+    top += 1;
+  }
+  while (bottom >= top && !rowHasOpaquePixel(bottom)) {
+    bottom -= 1;
+  }
+
+  if (top === 0 && bottom === height - 1) {
+    return imageBuffer;
+  }
+
+  if (top > bottom) {
+    return imageBuffer;
+  }
+
+  const croppedHeight = bottom - top + 1;
+  return sharp(imageBuffer)
+    .extract({
+      left: 0,
+      top,
+      width,
+      height: croppedHeight,
+    })
+    .png({ compressionLevel: 9, palette: true, quality: 90 })
+    .toBuffer();
+}
+
 function resolveGridDimensions(count: number): GridDimensions {
   if (count <= 1) return { cols: 1, rows: 1 };
   if (count === 2) return { cols: 2, rows: 1 };
@@ -84,7 +134,7 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     }
   }
 
-  return sharp({
+  const composed = await sharp({
     create: {
       width: CANVAS_WIDTH,
       height: CANVAS_HEIGHT,
@@ -95,4 +145,6 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     .composite(composites)
     .png({ compressionLevel: 9, palette: true, quality: 90 })
     .toBuffer();
+
+  return cropTransparentRowsKeepingWidth(composed);
 }
