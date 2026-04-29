@@ -43,6 +43,7 @@ import {
 import { SeparatorSpacingSize } from "discord-api-types/v10";
 import Member, { type IMemberNowPlayingEntry } from "../classes/Member.js";
 import {
+  safeDeferUpdate,
   safeDeferReply,
   safeReply,
   safeUpdate,
@@ -2798,6 +2799,8 @@ export class NowPlayingCommand {
 
   @SelectMenuComponent({ id: /^nowplaying-all-select(?::v1)?$/ })
   async handleNowPlayingAllSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+    await safeDeferUpdate(interaction);
+
     const selectedUserId = interaction.values?.[0];
     if (!selectedUserId) return;
 
