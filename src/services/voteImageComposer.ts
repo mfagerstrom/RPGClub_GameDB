@@ -183,10 +183,6 @@ export async function composeVoteImage(params: IComposeVoteImageParams): Promise
     ? Math.max(cols, usableWidth - rowStaggerAmount * 2)
     : usableWidth;
 
-  const tileWidth = Math.floor((usableWidthForTiles - TILE_GAP * (cols - 1)) / cols);
-  const usableHeight = CANVAS_HEIGHT - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
-  const tileHeight = Math.floor((usableHeight - TILE_GAP * (rows - 1)) / rows);
-
   const composites: sharp.OverlayOptions[] = [];
   const tileGap = TILE_GAP;
   const tileWidth = custom?.cols === 2
